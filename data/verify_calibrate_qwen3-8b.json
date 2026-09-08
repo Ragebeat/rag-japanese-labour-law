@@ -1,0 +1,241 @@
+[
+  {
+    "id": 1,
+    "q": "有給って入社してすぐもらえるの？",
+    "raw": "適用: [1]=可 [2]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 3,
+    "q": "1日何時間まで働かせていいの？",
+    "raw": "適用: [2]=可 [4]=可 [5]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 5,
+    "q": "週に何日休みが必要？",
+    "raw": "適用: [2]=可 [1]=不可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      1
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 7,
+    "q": "急に解雇された、予告なしでいいの？",
+    "raw": "適用: [1]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 10,
+    "q": "契約社員の契約期間の上限は？",
+    "raw": "適用: [3]\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 12,
+    "q": "会社都合で休みになったら給料出る？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=不可 [4]=不可 [5]=不可  \n欠落: [2] 第八条の二  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "missing": "[2] 第八条の二",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 15,
+    "q": "就業規則って何人から作らないといけない？",
+    "raw": "適用: [1]=可 [2]=可 [4]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 17,
+    "q": "パパも育休取れるの？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=可 [4]=不可 [5]=不可  \n欠落: [3] 第九条の六  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      4,
+      5
+    ],
+    "missing": "[3] 第九条の六",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 19,
+    "q": "子どもの看護で休める？",
+    "raw": "適用: [1]=不可 [2]=不可  \n欠落: [4] 第六十一条  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      1,
+      2
+    ],
+    "missing": "[4] 第六十一条",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 22,
+    "q": "何ヶ月働けば失業保険もらえる？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=可 [4]=不可 [5]=不可  \n欠落: [4] 第二十条  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      4,
+      5
+    ],
+    "missing": "[4] 第二十条",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 25,
+    "q": "理由なく解雇されたら？",
+    "raw": "適用: [1]=可 [2]=可 [3]=不可 [4]=不可 [5]=不可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      3,
+      4,
+      5
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 27,
+    "q": "最低賃金より低い給料は違法？",
+    "raw": "適用: [2]=不可 [4]=不可  \n欠落: [1] 第二十八条  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      4
+    ],
+    "missing": "[1] 第二十八条",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 29,
+    "q": "ストレスチェックって義務？",
+    "raw": "適用: [1]=可 [2]=可 [4]=可  \n欠落: [3] 第六十六条の十第三項  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "[3] 第六十六条の十第三項",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 32,
+    "q": "セクハラ対策は会社の義務？",
+    "raw": "適用: [1]=不可 [2]=可 [3]=可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      1
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 34,
+    "q": "パワハラ対策は会社の義務？",
+    "raw": "適用: [1]=可 [2]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 36,
+    "q": "パートにも待遇を説明してもらえる？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=不可 [4]=不可 [5]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      3,
+      4
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 39,
+    "q": "通勤中のケガも労災？",
+    "raw": "適用: [1]=不可 [2]=可 [3]=可\n欠落: [4] 第三十四条第四項\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      1
+    ],
+    "missing": "[4] 第三十四条第四項",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 41,
+    "q": "65歳まで働けるの？",
+    "raw": "適用: [1]=可 [2]=不可 [5]=不可  \n欠落: [2] 第十条の二  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      5
+    ],
+    "missing": "[2] 第十条の二",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 43,
+    "q": "バイトでも有給ある？",
+    "raw": "適用: [1]=可  \n欠落: なし  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 45,
+    "q": "仕事中のケガの治療費は誰が払う？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=不可  \n欠落: [4] 第七条  \n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      3
+    ],
+    "missing": "[4] 第七条",
+    "contradiction": "",
+    "block": true
+  }
+]

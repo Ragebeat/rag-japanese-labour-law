@@ -1,0 +1,238 @@
+[
+  {
+    "id": 1,
+    "q": "有給って入社してすぐもらえるの？",
+    "raw": "適用: [1]=可 [2]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 3,
+    "q": "1日何時間まで働かせていいの？",
+    "raw": "適用: [2]=可 [4]=可 [5]=可\n欠落: [1] 第十二条の四\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "[1] 第十二条の四",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 5,
+    "q": "週に何日休みが必要？",
+    "raw": "適用: [1]=可 [2]=可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 7,
+    "q": "急に解雇された、予告なしでいいの？",
+    "raw": "適用: [1]=可\n欠落: [4] 第十七条\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "[4] 第十七条",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 10,
+    "q": "契約社員の契約期間の上限は？",
+    "raw": "適用: [1]=可 [3]=可 [5]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      5
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 12,
+    "q": "会社都合で休みになったら給料出る？",
+    "raw": "適用: [1]=可 [5]=不可\n欠落: なし\n矛盾: 業務上負傷または疾病により所定労働時間の一部のみ労働した場合も、使用者は平均賃金と実際に支払われる賃金との差額の百分の六十の額を休業補償として支払う義務があります",
+    "parsed": true,
+    "inapplicable": [
+      5
+    ],
+    "missing": "",
+    "contradiction": "業務上負傷または疾病により所定労働時間の一部のみ労働した場合も、使用者は平均賃金と実際に支払われる賃金との差額の百分の六十の額を休業補償として支払う義務があります",
+    "block": true
+  },
+  {
+    "id": 15,
+    "q": "就業規則って何人から作らないといけない？",
+    "raw": "適用: [1]=可 [2]=不可 [4]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      4
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 17,
+    "q": "パパも育休取れるの？",
+    "raw": "適用: [1]=可 [3]=可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 19,
+    "q": "子どもの看護で休める？",
+    "raw": "適用: [1]=不可 [2]=不可\n欠落: [1] 第十六条の二第1項\n矛盾: 一日の所定労働時間が短い労働者として厚生労働省令で定めるもの以外の者は、厚生労働省令で定めるところにより、一日未満の単位で取得できると規定されています",
+    "parsed": true,
+    "inapplicable": [
+      1,
+      2
+    ],
+    "missing": "[1] 第十六条の二第1項",
+    "contradiction": "一日の所定労働時間が短い労働者として厚生労働省令で定めるもの以外の者は、厚生労働省令で定めるところにより、一日未満の単位で取得できると規定されています",
+    "block": true
+  },
+  {
+    "id": 22,
+    "q": "何ヶ月働けば失業保険もらえる？",
+    "raw": "適用: [1]=可 [3]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      3
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 25,
+    "q": "理由なく解雇されたら？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=不可 [4]=不可 [5]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 27,
+    "q": "最低賃金より低い給料は違法？",
+    "raw": "適用: [2]=可 [4]=不可\n欠落: [4] 第1条第2項\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      4
+    ],
+    "missing": "[4] 第1条第2項",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 29,
+    "q": "ストレスチェックって義務？",
+    "raw": "適用: [1]=可 [2]=可 [4]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      4
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 32,
+    "q": "セクハラ対策は会社の義務？",
+    "raw": "適用: [2]=可 [3]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      3
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 34,
+    "q": "パワハラ対策は会社の義務？",
+    "raw": "適用: [1]=可 [2]=可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 36,
+    "q": "パートにも待遇を説明してもらえる？",
+    "raw": "適用: [1]=可 [5]=不可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      5
+    ],
+    "missing": "",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 39,
+    "q": "通勤中のケガも労災？",
+    "raw": "適用: [2]=可 [3]=不可\n欠落: [1] 第三十四条第一項\n矛盾: 業務災害や複数業務要因災害の認定については、厚生労働省労働基準局長が定める基準によつて行うと定められています",
+    "parsed": true,
+    "inapplicable": [
+      3
+    ],
+    "missing": "[1] 第三十四条第一項",
+    "contradiction": "業務災害や複数業務要因災害の認定については、厚生労働省労働基準局長が定める基準によつて行うと定められています",
+    "block": true
+  },
+  {
+    "id": 41,
+    "q": "65歳まで働けるの？",
+    "raw": "適用: [1]=不可 [2]=可 [3]=不可 [5]=不可\n欠落: [1] 第九条第一項\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [
+      1,
+      3,
+      5
+    ],
+    "missing": "[1] 第九条第一項",
+    "contradiction": "",
+    "block": true
+  },
+  {
+    "id": 43,
+    "q": "バイトでも有給ある？",
+    "raw": "適用: [1]=可\n欠落: なし\n矛盾: なし",
+    "parsed": true,
+    "inapplicable": [],
+    "missing": "",
+    "contradiction": "",
+    "block": false
+  },
+  {
+    "id": 45,
+    "q": "仕事中のケガの治療費は誰が払う？",
+    "raw": "適用: [1]=可 [2]=不可 [3]=不可\n欠落: なし\n矛盾: 政府は、療養の給付が困難な場合などには、療養の費用を支給することができる。所轄労働基準監督署長に定められた事項を記載した請求書を提出する必要があります。",
+    "parsed": true,
+    "inapplicable": [
+      2,
+      3
+    ],
+    "missing": "",
+    "contradiction": "政府は、療養の給付が困難な場合などには、療養の費用を支給することができる。所轄労働基準監督署長に定められた事項を記載した請求書を提出する必要があります。",
+    "block": true
+  }
+]
