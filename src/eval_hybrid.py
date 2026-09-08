@@ -1,6 +1,6 @@
-"""Оценка трёх режимов поиска на golden dataset.
+"""Evaluation of three search modes on the golden dataset.
 
-База (вектор на numpy, точный перебор): recall@5 = 0.68 core, 0.60 all.
+Baseline (vector search in numpy, exact scan): recall@5 = 0.68 core, 0.60 all.
 
   python src/eval_hybrid.py
 """
@@ -19,7 +19,7 @@ OUT = ROOT / "data" / "eval_hybrid.json"
 
 KS = (1, 3, 5, 10)
 MAXK = max(KS)
-BASELINE = {"core": 0.680, "all": 0.600}      # recall@5 наивного векторного
+BASELINE = {"core": 0.680, "all": 0.600}      # recall@5 of the naive vector search
 
 
 def first_hit(results, relevant):
@@ -71,7 +71,7 @@ def main():
         print(f"гибрид                         = {best:.3f}  "
               f"({best - base:+.3f})\n")
 
-    # что починилось и что сломалось относительно чистого вектора
+    # what got fixed and what broke relative to plain vector search
     v = {r["id"]: r["pos"] for r in report["core/vector"]["rows"]}
     b = {r["id"]: r["pos"] for r in report["core/bm25"]["rows"]}
     hy = {r["id"]: r["pos"] for r in report["core/hybrid"]["rows"]}

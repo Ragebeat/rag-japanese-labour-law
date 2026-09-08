@@ -1,13 +1,13 @@
-"""Гибридный поиск: вектор + BM25, объединение через RRF.
+"""Hybrid search: vector + BM25, fused with RRF.
 
-Почему RRF, а не взвешенная сумма оценок: косинус даёт ~0.58,
-ts_rank ~0.09 — шкалы несопоставимы и плавают от запроса к запросу.
-RRF выбрасывает оценки и работает только с позициями:
+Why RRF and not a weighted sum of scores: cosine gives ~0.58, ts_rank ~0.09 —
+the scales are incomparable and drift from query to query. RRF discards the
+scores and works on positions alone:
 
     score(d) = Σ 1 / (k + rank_i(d))
 
-k = 60 — из оригинальной статьи Cormack et al. 2009. Гасит разницу
-между верхними позициями, чтобы один метод не забивал второй.
+k = 60, from the original Cormack et al. 2009 paper. It damps the difference
+between top positions so that one method cannot drown out the other.
 
   python src/hybrid.py "有給ってすぐもらえる？"
   python src/hybrid.py "パワハラ対策？" --core
@@ -28,13 +28,13 @@ from query_expand import expand  # noqa: E402
 from query_llm import expand_llm, expand_combo  # noqa: E402
 
 def _load_env():
-    """Читает .env в корне проекта, не затирая уже заданные переменные.
+    """Reads .env from the project root without overriding existing variables.
 
-    Раньше .env подгружала IDE — из голого терминала падало на
-    fe_sendauth: no password supplied. Зависеть от того, откуда запущено,
-    для воспроизводимости замеров негодится.
+    The IDE used to load .env; from a bare terminal everything failed with
+    fe_sendauth: no password supplied. Depending on where a script is launched
+    from is no basis for reproducible measurements.
 
-    Без python-dotenv: одна зависимость ради десяти строк не нужна.
+    No python-dotenv: one dependency for ten lines is not worth it.
     """
     path = pathlib.Path(__file__).resolve().parent.parent / ".env"
     if not path.exists():
@@ -59,13 +59,13 @@ DSN = os.environ.get(
 MODEL = "bge-m3"
 OLLAMA = "http://localhost:11434/api/embed"
 RRF_K = 60
-POOL = 50          # сколько берём из каждого метода до слияния
+POOL = 50          # how many we take from each method before fusion
 
-# HNSW — ПРИБЛИЖЁННЫЙ индекс. Замерено на нашем корпусе:
-#   ef_search=40  (дефолт) → 第39条 НЕ попадает в топ-10 вообще
-#   ef_search=100            → 第39条 на 6-м месте (= точный перебор numpy)
-#   ef_search=400            → то же самое, выигрыша нет
-# Дефолт теряет результаты МОЛЧА — ни ошибки, ни предупреждения.
+# HNSW is an APPROXIMATE index. Measured on this corpus:
+#   ef_search=40  (default) -> 第39条 does not make the top 10 at all
+#   ef_search=100            -> 第39条 in 6th place (= exact numpy scan)
+#   ef_search=400            -> the same, no further gain
+# The default drops results SILENTLY — no error, no warning.
 EF_SEARCH = 100
 
 FIELDS = ("id, chunk_id, text, law_id, law_title, law_type, core, "
@@ -86,8 +86,8 @@ class Hybrid:
         return np.array(r.json()["embeddings"][0], dtype=np.float32)
 
     def vector_search(self, query, limit=POOL, core_only=False):
-        """Векторный. <#> — ОТРИЦАТЕЛЬНОЕ скалярное произведение,
-        поэтому ASC даёт самые похожие первыми."""
+        """Vector search. <#> is the NEGATIVE inner product,
+        so ASC returns the most similar first."""
         q = self.embed(query)
         where = "WHERE core" if core_only else ""
         sql = f"""
@@ -99,8 +99,8 @@ class Hybrid:
         return self._rows(sql, (q, q, limit))
 
     def bm25_search(self, query, limit=POOL, core_only=False, min_rank=0.0):
-        """Лексический через tsvector. Запрос токенизируется
-        ТЕМ ЖЕ Sudachi, что и корпус — иначе токены не совпадут."""
+        """Lexical search via tsvector. The query is tokenised with
+        THE SAME Sudachi as the corpus, or the tokens will not match."""
         toks = tokenize(query)
         if not toks:
             return []
@@ -125,7 +125,7 @@ class Hybrid:
         return [dict(zip(cols, r)) for r in cur.fetchall()]
 
     def _fuse(self, lists, weights):
-        """RRF по нескольким ранжированиям."""
+        """RRF over several rankings."""
         fused = {}
         for lst, w, tag in lists:
             for rank, row in enumerate(lst, 1):
@@ -147,10 +147,10 @@ class Hybrid:
                 return expand_llm(q)
             return expand(q, narrow)
 
-        # multi-query: ищем ПО ОБОИМ вариантам запроса и сливаем.
-        # Решает проблему из замера: расширение чинит 7 вопросов,
-        # но ломает 3 — те, где оригинал был первым. При слиянии
-        # такой результат не теряется — он получает 1/(60+1) из своего списка.
+        # multi-query: search by BOTH query variants and fuse.
+        # Solves a problem seen in the measurements: expansion fixes 7 questions
+        # but breaks 3 — the ones where the original ranked first. Fusion keeps
+        # such a result: it still earns 1/(60+1) from its own list.
         if mode == "multiquery":
             exp, extra = _do_expand(query)
             orig = self.vector_search(query, pool_vec, core_only)

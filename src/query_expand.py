@@ -1,17 +1,18 @@
-"""Расширение запроса словарём разговорных → юридических терминов.
+"""Query expansion with a colloquial-to-legal term dictionary.
 
-Словарь лежит в `data/synonyms.json` — пополняется без правки кода.
+The dictionary lives in `data/synonyms.json` and is extended without touching
+the code.
 
-Диагноз из занятия 3: гибридный поиск провалился из-за терминологического
-разрыва: パワハラ и 育休 в тексте законов ОТСУТСТВУЮТ вообще.
+The diagnosis from session 3: hybrid search failed because of a terminology
+gap — パワハラ and 育休 are ABSENT from the statutory text entirely.
 
-⚠️ Словарь составлен ПО ЗНАНИЮ ДОМЕНА, а НЕ по списку проваленных
-вопросов golden. Иначе это было бы вписывание ответов в словарь,
-а не улучшение поиска.
+⚠️ The dictionary was written FROM DOMAIN KNOWLEDGE, not from the list of
+failed golden questions. Otherwise it would be writing the answers into the
+dictionary rather than improving search.
 
-⚠️ Главное ограничение: словарь покрывает только предусмотренное.
-На незнакомом термине он молчит. Отсюда связка с LLM-fallback
-(см. query_llm.py) — словарь для частотного, модель для остального.
+⚠️ Its main limitation: it covers only what was anticipated. On an unfamiliar
+term it stays silent. Hence the pairing with an LLM fallback (see
+query_llm.py) — the dictionary for the frequent cases, the model for the rest.
 
   python src/query_expand.py "育休っていつまで？"
 """
@@ -27,7 +28,7 @@ _syn = None
 
 
 def synonyms():
-    """Словарь из JSON. Ключи на `_` — комментарии, пропускаются."""
+    """The dictionary from JSON. Keys starting with `_` are comments and skipped."""
     global _syn
     if _syn is None:
         raw = json.loads(DICT_PATH.read_text(encoding="utf-8"))
@@ -37,14 +38,14 @@ def synonyms():
 
 
 def expand(query, narrow=False):
-    """Добавляет юридические эквиваленты К запросу, не заменяя его.
+    """Adds legal equivalents TO the query instead of replacing it.
 
-    Заменять было бы рискованно: если словарь ошибётся, теряется
-    исходный смысл. Добавление только расширяет покрытие.
+    Replacing would be risky: if the dictionary is wrong, the original meaning
+    is lost. Adding only widens coverage.
 
-    narrow=True — только первый термин из списка. На замере видно,
-    что длинный хвост размывает: 労災 → 業務災害 通勤災害 補償
-    тянет к статьям про 通勤, хотя спрашивали про 休業補償.
+    narrow=True — only the first term of each list. The measurements show that
+    a long tail dilutes: 労災 -> 業務災害 通勤災害 補償 pulls towards articles
+    about 通勤 when the question was about 休業補償.
     """
     extra = []
     for slang, legal in synonyms().items():

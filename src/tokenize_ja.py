@@ -1,23 +1,23 @@
-"""Токенизация японского для BM25 через Sudachi.
+"""Japanese tokenisation for BM25 via Sudachi.
 
-Решения выведены замерами, не взяты из туториала:
+The decisions come from measurements, not from a tutorial:
 
-1. Режим A (короткие единицы). В режиме C 年次有給休暇 — ОДИН токен,
-   и запрос про 有給 не найдёт его никогда. Низкая избирательность
-   частых токенов (労働) лечится самим BM25 через IDF.
+1. Mode A (short units). In mode C 年次有給休暇 is ONE token, and a query for
+   有給 would never match it. The low selectivity of frequent tokens (労働) is
+   handled by BM25 itself through IDF.
 
-2. Индексируем surface(), НЕ normalized_form(). Нормализация Sudachi —
-   это каноническое написание, а не словарная форма: する→為る,
-   その→其の, 十→10. Таких написаний нет ни в законе, ни в запросе.
+2. We index surface(), NOT normalized_form(). Sudachi's normalisation is a
+   canonical orthography, not a dictionary form: する->為る, その->其の, 十->10.
+   Those spellings appear neither in the statute nor in the query.
 
-3. Фильтруем ПО normalized_form — так し / する / 為る отсеиваются
-   одним правилом, а индексируется поверхностная форма.
+3. We filter ON normalized_form — that way し / する / 為る are dropped by one
+   rule while the surface form is what gets indexed.
 
-4. 接尾辞 НЕ выбрасываем — там живёт 者 (労働者, 使用者), ключевые
-   слова корпуса.
+4. We do NOT discard 接尾辞: that is where 者 lives (労働者, 使用者), the key
+   words of this corpus.
 
-Знаем заранее, что BM25 не вытянет: パワハラ (в законе 優越的な関係…),
-育休 (в законе 育児休業), 36協定. Это для query transformation.
+Known in advance to be beyond BM25: パワハラ (the statute says 優越的な関係…),
+育休 (the statute says 育児休業), 36協定. Those are for query transformation.
 """
 
 from sudachipy import Dictionary, SplitMode
@@ -36,14 +36,14 @@ def _get():
 
 
 def _split_long(text, limit=10000):
-    """Sudachi падает на очень длинных строках."""
+    """Sudachi crashes on very long strings."""
     if len(text) <= limit:
         return [text]
     return [text[i:i + limit] for i in range(0, len(text), limit)]
 
 
 def tokenize(text):
-    """Список токенов для BM25."""
+    """The list of tokens for BM25."""
     t = _get()
     out = []
     for part in _split_long(text):
@@ -57,7 +57,7 @@ def tokenize(text):
 
 
 def to_tsvector_text(text):
-    """Токены через пробел — для Postgres to_tsvector('simple', ...)."""
+    """Tokens joined by spaces — for Postgres to_tsvector('simple', ...)."""
     return " ".join(tokenize(text))
 
 

@@ -45,7 +45,7 @@ def main():
     art_deleted = 0
     suppl_chars = main_chars = 0
     big_articles = []
-    par_samples = []  # для замера токенов
+    par_samples = []  # for the token measurement
 
     for f in files:
         law_id = f.stem
@@ -63,7 +63,7 @@ def main():
         for mp in root.iter("MainProvision"):
             main_chars += len(text_of(mp))
 
-        # статьи только из основной части
+        # articles from the main body only
         for mp in root.iter("MainProvision"):
             for art in mp.iter("Article"):
                 t = text_of(art)
@@ -104,7 +104,7 @@ def main():
     for n, law_id, num, title, cap in sorted(big_articles, reverse=True)[:10]:
         print(f"  {n:>6}  {law_id}  {title}{cap}")
 
-    # символы → токены на реальном корпусе
+    # characters -> tokens on the real corpus
     sample = "".join(par_samples)
     tok = len(ENC.encode(sample))
     print(f"\nтокенизация выборки ({len(par_samples)} параграфов, {len(sample)} симв):")

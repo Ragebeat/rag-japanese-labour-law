@@ -6,11 +6,11 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ragdb}
       POSTGRES_USER: ${POSTGRES_USER:-rag}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задай POSTGRES_PASSWORD в .env}
-      # японский текст — только UTF-8
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Japanese text — UTF-8 only
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     ports:
-      # 5433 снаружи, чтобы не столкнуться с локальным Postgres
+      # 5433 on the host so it does not clash with a local Postgres
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data

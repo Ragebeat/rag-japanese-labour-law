@@ -1,12 +1,12 @@
-"""Схема БД и заливка чанков с векторами и японским tsvector.
+"""Database schema, plus loading chunks with vectors and a Japanese tsvector.
 
-  python src/db_init.py schema   — создать таблицу (DROP + CREATE)
-  python src/db_init.py load     — залить данные
-  python src/db_init.py index    — построить индексы
-  python src/db_init.py stats    — проверить, что получилось
+  python src/db_init.py schema   — create the table (DROP + CREATE)
+  python src/db_init.py load     — load the data
+  python src/db_init.py index    — build the indexes
+  python src/db_init.py stats    — check what came out
 
-Индексы строим ПОСЛЕ заливки — строить до значит перестраивать
-дерево на каждом INSERT.
+Indexes are built AFTER loading. Building them first means rebuilding the
+tree on every INSERT.
 """
 
 import json
@@ -64,8 +64,8 @@ CREATE TABLE chunks (
 """
 
 INDEXES = [
-    # HNSW по скалярному произведению: векторы нормализованы (|v|=1),
-    # значит ip даёт тот же порядок, что cosine, но без лишнего деления
+    # HNSW over inner product: the vectors are normalised (|v|=1), so ip gives
+    # the same ordering as cosine without the extra division
     ("idx_chunks_hnsw",
      "CREATE INDEX idx_chunks_hnsw ON chunks "
      "USING hnsw (embedding vector_ip_ops) WITH (m = 16, ef_construction = 64)"),

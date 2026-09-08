@@ -1,19 +1,18 @@
-"""HTTP-слой над конвейером. FastAPI + SSE.
+"""HTTP layer over the pipeline. FastAPI + SSE.
 
-Три решения, заложенных сразу, потому что переделывать дороже:
+Three decisions taken up front, because retrofitting them costs more:
 
-1. МОДЕЛИ ЖИВУТ В ПРОЦЕССЕ. Reranked и cross-encoder поднимаются в lifespan
-   и переиспользуются. В скриптах реранкер грузился заново при каждом запуске
-   — 15 секунд, которые в вебе были бы на каждом запросе.
+1. MODELS LIVE IN THE PROCESS. Reranked and the cross-encoder are loaded in
+   lifespan and reused. In the CLI scripts the reranker was loaded again on
+   every run — 15 seconds that would otherwise be paid on every web request.
 
-2. ОТДАЁМ НЕ ТОЛЬКО ТЕКСТ. Контекст со score, разбор маркеров, вердикт и
-   список НЕиспользованных чанков. Все эти данные и так есть в момент
-   генерации — выбросить их значит заставить интерфейс показывать результат
-   вместо работы системы.
+2. WE RETURN MORE THAN TEXT. Context with scores, parsed markers, the verdict
+   and the list of UNUSED chunks. All of it exists at generation time anyway;
+   dropping it would force the UI to show the result instead of the work.
 
-3. СТРИМИНГ. Контекст уходит первым событием (retrieval уже завершён), потом
-   токены, потом итоговый разбор. Пользователь видит источники до того, как
-   模ель начала писать.
+3. STREAMING. Context goes out as the first event (retrieval is already
+   finished), then tokens, then the final analysis. The user sees the sources
+   before the model starts writing.
 
   uv run uvicorn src.api:app --reload --port 8000
 """
@@ -40,9 +39,9 @@ state = {}
 
 
 async def lifespan(app):
-    # Соединение с БД и cross-encoder — один раз на процесс.
+    # DB connection and cross-encoder: once per process.
     state["rr"] = Reranked()
-    rerank._get()          # прогрев: иначе первый запрос платит 15 секунд
+    rerank._get()          # warm-up: otherwise the first request pays 15 seconds
     state["http"] = httpx.AsyncClient(timeout=300)
     yield
     await state["http"].aclose()
@@ -50,7 +49,7 @@ async def lifespan(app):
 
 app = FastAPI(title="Japanese Labour Law RAG", lifespan=lifespan)
 
-# Фронт живёт на другом порту в разработке.
+# In development the front end runs on a different port.
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
@@ -63,7 +62,7 @@ class Ask(BaseModel):
 
 
 def _sources(chunks):
-    """Контекст в виде, пригодном для показа: заголовок, score, полный текст."""
+    """Context in a shape fit for display: heading, score, full text."""
     return [{
         "n": i,
         "law": c["law_title"],
@@ -84,8 +83,8 @@ def _payload(question, chunks, answer):
         "verdict": info["verdict"],
         "sources": _sources(chunks),
         "used": sorted(used),
-        # Чанки, которые модель не взяла. Показывать их важнее, чем кажется:
-        # именно там видно, что retrieval нашёл, а генерация проигнорировала.
+        # Chunks the model did not take. Showing them matters more than it looks:
+        # this is where you see what retrieval found and generation ignored.
         "unused": [i for i in range(1, len(chunks) + 1) if i not in used],
         "cited_articles": info["cited"],
         "transitive": info["transitive"],
@@ -101,7 +100,7 @@ async def health():
 
 @app.post("/ask")
 async def ask(req: Ask):
-    """Синхронный ответ целиком. Для скриптов и отладки."""
+    """The whole answer at once. For scripts and debugging."""
     chunks = retrieve(state["rr"], req.q, req.mode, k=req.k)
     if not chunks:
         raise HTTPException(404, "ничего не найдено")
@@ -126,7 +125,7 @@ def _sse(event, data):
 
 @app.post("/ask/stream")
 async def ask_stream(req: Ask):
-    """SSE: сначала источники, затем токены, затем разбор ответа."""
+    """SSE: sources first, then tokens, then the analysis of the answer."""
 
     async def gen():
         try:
@@ -138,7 +137,7 @@ async def ask_stream(req: Ask):
             yield _sse("error", {"message": "ничего не найдено"})
             return
 
-        # Источники уходят до генерации — их уже можно показывать.
+        # Sources go out before generation — they can already be displayed.
         yield _sse("sources", {"sources": _sources(chunks)})
 
         body = {
@@ -169,19 +168,19 @@ async def ask_stream(req: Ask):
             yield _sse("error", {"message": str(e)})
             return
 
-        # Разбор считаем по полному тексту — маркеры и вердикт целиком
-        # видны только в конце.
+        # The analysis runs on the complete text: markers and the verdict are
+        # only fully visible at the end.
         yield _sse("done", _payload(req.q, chunks, "".join(parts).strip()))
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",     # иначе nginx буферизует поток
+        "X-Accel-Buffering": "no",     # without this nginx buffers the stream
     })
 
 
-# Собранный фронт — если есть. Монтируется последним, чтобы не перехватывать
-# /ask и /health. В разработке фронт живёт на Vite (прокси на :8000),
-# для демо — npm run build и всё крутится на одном порту.
+# The built front end, if present. Mounted last so it does not intercept
+# /ask and /health. In development the UI runs on Vite (proxying to :8000),
+# for a demo — npm run build and everything serves from one port.
 _dist = pathlib.Path(__file__).resolve().parent.parent / "web" / "dist"
 if _dist.exists():
     app.mount("/", StaticFiles(directory=_dist, html=True), name="web")

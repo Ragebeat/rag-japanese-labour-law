@@ -1,21 +1,22 @@
-"""Разделяются ли контексты с источником и без него по score реранкера?
+"""Do contexts with and without the source separate by reranker score?
 
-Идея: решение об отказе не выпрашивать у 4B-модели промптом, а вынести
-за её пределы — на порог по top-1 score cross-encoder'а. Тогда отказ
-детерминирован и настраивается одним числом.
+The idea: rather than begging a 4B model for a refusal through the prompt,
+move the decision outside it — onto a threshold on the cross-encoder's top-1
+score. Then refusal is deterministic and tuned by a single number.
 
-Одна rerank-прогонка на вопрос: реранкер скорит весь пул из 20 сразу,
-из него получаем и обычный топ-1, и топ-1 после удаления золотой статьи.
+One reranking pass per question: the reranker scores the whole pool of 20 at
+once, and from it we get both the ordinary top-1 and the top-1 after the gold
+article is removed.
 
-⚠️ ЧЕГО ЭТА ЦИФРА НЕ ДОКАЗЫВАЕТ.
-При r@1 = 0.60 золотая статья часто и ЕСТЬ топ-1. Убрали её — балл упал
-по построению, и AUC на абляции завышена. Честная проверка — шесть
-естественных промахов, где статьи не было изначально. Их мало, но они
-не подстроены.
+⚠️ WHAT THIS NUMBER DOES NOT PROVE.
+At r@1 = 0.60 the gold article often IS the top-1. Remove it and the score
+drops by construction, so the AUC on the ablation is inflated. The honest
+check is the six natural misses, where the article was never there to begin
+with. There are few of them, but they are not staged.
 
-⚠️ Порог не подбирается ради красивой цифры. Он задаётся продуктовым
-решением «сколько over-refusal мы готовы терпеть» (5-й перцентиль
-группы с источником), и уже потом смотрим, что получилось.
+⚠️ The threshold is not tuned for a pretty number. It is set by a product
+decision — how much over-refusal we are willing to accept (the 5th percentile
+of the group with a source) — and only then do we look at what came out.
 
   uv run python src/score_gate.py
 """
@@ -34,7 +35,7 @@ OUT = ROOT / "data" / "score_gate.json"
 
 
 def auc(pos, neg):
-    """P(случайный из pos выше случайного из neg). 0.5 — неразличимы."""
+    """P(a random member of pos scores above a random member of neg). 0.5 — indistinguishable."""
     if not pos or not neg:
         return float("nan")
     wins = sum((a > b) + 0.5 * (a == b) for a in pos for b in neg)
@@ -68,9 +69,9 @@ def main():
               f"{rows[-1]['top1_full']:+.3f} → {rows[-1]['top1_ablated']:+.3f}  "
               f"{g['q'][:26]}")
 
-    A = [x["top1_full"] for x in rows if x["hit"]]          # источник есть
-    B = [x["top1_ablated"] for x in rows if x["hit"]]       # источник удалён
-    C = [x["top1_full"] for x in rows if not x["hit"]]      # промах естественный
+    A = [x["top1_full"] for x in rows if x["hit"]]          # the source is present
+    B = [x["top1_ablated"] for x in rows if x["hit"]]       # the source was removed
+    C = [x["top1_full"] for x in rows if not x["hit"]]      # a natural retrieval miss
 
     def stat(name, xs):
         if not xs:
@@ -86,7 +87,7 @@ def main():
     print(f"\nAUC(A против B): {auc(A, B):.3f}   ← завышена: удаляли часто сам топ-1")
     print(f"AUC(A против C): {auc(A, C):.3f}   ← честная, но n={len(C)}")
 
-    # Порог задан бюджетом на over-refusal, а не максимизацией разделения.
+    # The threshold is set by an over-refusal budget, not by maximising separation.
     thr = q(A, 5)
     print(f"\nпорог = 5-й перцентиль A = {thr:+.3f}  (то есть терпим 5% over-refusal)")
     for name, xs in (("A", A), ("B", B), ("C", C)):

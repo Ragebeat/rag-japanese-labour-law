@@ -1,6 +1,6 @@
-"""Векторный поиск по корпусу.
+"""Vector search over the corpus.
 
-Векторы нормализованы (|v| = 1), поэтому dot == cosine.
+The vectors are normalised (|v| = 1), so dot equals cosine.
 
   python src/search.py "有給ってすぐもらえる？"
   python src/search.py "パワハラ対策？" --core

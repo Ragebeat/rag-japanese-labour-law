@@ -1,7 +1,8 @@
-"""Векторизация чанков через Ollama + BGE-M3.
+"""Embedding the chunks through Ollama + BGE-M3.
 
-Векторы нормализованы моделью (|v| = 1), поэтому dot == cosine по порядку.
-Возобновляемо: при обрыве перезапуск продолжит с места остановки.
+The model returns normalised vectors (|v| = 1), so dot and cosine give the
+same ordering. Resumable: after an interruption a restart continues from
+where it stopped.
 """
 
 import json
@@ -21,12 +22,12 @@ MODEL = "bge-m3"
 URL = "http://localhost:11434/api/embed"
 DIM = 1024
 BATCH = 32
-CHECKPOINT = 20          # батчей между сохранениями состояния
-RETRIES = 4              # попыток на батч
+CHECKPOINT = 20          # batches between state saves
+RETRIES = 4              # attempts per batch
 
 
 def embed_batch(client, texts):
-    """Ошибки Ollama здесь временные (выгрузка модели, таймаут) — ретраим."""
+    """Ollama errors here are transient (model swap, timeout) — retry."""
     last = None
     for attempt in range(RETRIES):
         try:
@@ -57,7 +58,7 @@ def main():
     n = len(texts)
     print(f"чанков: {n}")
 
-    # memmap на диск — 20162 × 1024 × 4 байта ≈ 80 МБ
+    # memmap to disk — 20162 x 1024 x 4 bytes ~ 80 MB
     mode = "r+" if VECTORS.exists() else "w+"
     vecs = np.lib.format.open_memmap(VECTORS, mode=mode, dtype=np.float32,
                                      shape=(n, DIM))

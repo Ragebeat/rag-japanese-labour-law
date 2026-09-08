@@ -1,18 +1,18 @@
-"""Генерация ответа по найденным статьям, с цитированием.
+"""Generating an answer from the retrieved articles, with citations.
 
-Ключевое решение: модель отвечает ТОЛЬКО по поданным чанкам, а ссылку
-даёт маркером [N] — номером чанка, который мы сами проставили в контекст.
-Если ответа в контексте нет — обязана отказаться.
+The key decision: the model answers ONLY from the supplied chunks, and cites
+by an [N] marker — the chunk number we put into the context ourselves. If the
+answer is not in the context, it must refuse.
 
-Почему маркер, а не номер статьи: номер статьи приходится выковыривать
-регексом из свободного текста, и модель пишет его как хочет (第39条 /
-第三十九条 / 第３９条). Маркер [N] мы контролируем сами — сопоставление
-ответ→чанк становится точным, а не эвристикой. Номер статьи модель тоже
-пишет (для человека) и он проверяется вторым, независимым способом.
+Why a marker rather than an article number: an article number has to be dug
+out of free text with a regex, and the model writes it however it likes
+(第39条 / 第三十九条 / 第３９条). The [N] marker is ours, so mapping answer to
+chunk becomes exact instead of heuristic. The model also writes the article
+number for human readers, and that is verified a second, independent way.
 
   python src/generate.py "有給って入社してすぐもらえるの？"
-  python src/generate.py --sample     # 5 вопросов сырьём, смотреть глазами
-  python src/generate.py --eval       # прогон по golden
+  python src/generate.py --sample     # 5 questions raw, to read by eye
+  python src/generate.py --eval       # run over the golden set
 """
 
 import collections
@@ -32,16 +32,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
 CHUNKS = ROOT / "data" / "chunks.jsonl"
 
-# Режим сборки контекста по умолчанию. whole выбран по замерам:
-# recall@5 такой же, как у dedupe (0.88), over-refusal 2 → 0, обрезанных
-# статей нет. Не хуже ни по одному показателю и лучше по двум.
+# Default context assembly mode. `whole` was chosen on measurements:
+# recall@5 equals dedupe (0.88), over-refusal 2 -> 0, and no truncated
+# articles. Not worse on any metric and better on two.
 DEFAULT_MODE = "whole"
 
 
 def report_path(mode, kind=""):
-    """Отчёты именуются по режиму сборки — иначе через месяц не вспомнить,
-    какой конфигурацией получены цифры. Цена путаницы уже известна:
-    всё занятие 8 было смерено на dedupe и потребовало перемера.
+    """Reports are named after the assembly mode — otherwise, a month later,
+    there is no telling which configuration produced which numbers. The cost
+    of that confusion is known: all of session 8 was measured on dedupe and
+    had to be re-measured.
     """
     return ROOT / "data" / f"gen_report{kind}_{mode}.json"
 
@@ -51,13 +52,13 @@ TOP_K = 5
 
 REFUSAL = "該当する規定が見つかりません"
 
-# ⚠️ В примерах формата НЕТ реальных статей и терминов из golden.
-# Урок занятия 5: пример в промпте становится шаблоном.
+# ⚠️ The format examples contain NO real articles or terms from the golden set.
+# Lesson from session 5: an example in the prompt becomes a template.
 #
-# Строка 「判定:」 добавлена по итогам первого прогона: отказ в прозе
-# модель выражала десятью разными формулировками и ни разу — чисто.
-# Тот же приём, что с маркером [N]: пусть модель выдаёт токен, который
-# мы контролируем, вместо выковыривания смысла из свободного текста.
+# The 「判定:」 line was added after the first run: in prose the model
+# expressed refusal in ten different phrasings and never once cleanly.
+# Same technique as the [N] marker: have the model emit a token we control
+# instead of digging meaning out of free text.
 SYSTEM = f"""あなたは日本の労働法令の検索結果を要約するアシスタントです。
 
 【出力形式】
@@ -75,17 +76,17 @@ SYSTEM = f"""あなたは日本の労働法令の検索結果を要約するア�
 5. 本文は3〜5文で簡潔に"""
 
 
-# ─────────────────────────── нормализация номеров ───────────────────────────
-# Сама нормализация номеров живёт в jnum.py: тем же разбором
-# пользуется expand_golden.py, а две копии — верный способ
-# починить только одну из них.
+# ────────────────────────── article number parsing ──────────────────────────
+# The normalisation itself lives in jnum.py: expand_golden.py uses the same
+# parsing, and two copies are a reliable way to fix only one of them.
+#
 
 MARK_RE = re.compile(r"\[(\d+)\]")
 VERDICT_RE = re.compile(r"判定[:：]\s*(回答可能|回答不可)")
 
-# Формулировки уклонения, собранные с первого прогона глазами.
-# Нужны НЕ для детекта отказа (для этого теперь есть 判定), а чтобы
-# посчитать перестраховку: сказала 回答可能 и тут же оговорилась.
+# Hedging phrases collected by eye from the first run.
+# NOT used to detect refusal (判定 does that now), but to count
+# over-hedging: said 回答可能 and immediately qualified it.
 HEDGE = ("見つかりません", "できませんでした", "確認できません",
          "判断できません", "記述はありません", "直接的な規定は",
          "ことはできません")
@@ -121,21 +122,22 @@ def generate(query, chunks, client=None):
             client.close()
 
 
-# ────────────────────────────── разбор ответа ───────────────────────────────
+# ───────────────────────────── answer analysis ──────────────────────────────
 
 def context_arts(chunks):
-    """Два множества статей, встречающихся в контексте.
+    """Two sets of articles occurring in the context.
 
-    source    — статьи, которые мы реально подали (article_title)
-    mentioned — плюс всё, что упомянуто в заголовках и телах чанков
+    source    — articles we actually supplied (article_title)
+    mentioned — plus everything named in chunk captions and bodies
 
-    Разница не формальная. Японское право сплошь построено на перекрёстных
-    отсылках (「法第二十五条第一項の…」, 「労働基準法第八十九条及び第九十条の
-    定めるところによる」). Названная так статья — не выдумка, но и не
-    источник: её текста у модели не было, проверить содержание нечем.
+    The distinction is not formal. Japanese law is built on cross-references
+    throughout (「法第二十五条第一項の…」, 「労働基準法第八十九条及び第九十条の
+    定めるところによる」). An article named that way is not a fabrication, but
+    it is not a source either: the model never saw its text, so there is
+    nothing to verify the content against.
 
-    Первый прогон считал только source — и дал 6 ложных галлюцинаций
-    из 6 найденных. Регекс был проверен, эталонное множество — нет.
+    The first run counted `source` only — and produced 6 false hallucinations
+    out of 6 found. The regex had been verified; the reference set had not.
     """
     source, extra = set(), set()
     for c in chunks:
@@ -146,12 +148,12 @@ def context_arts(chunks):
 
 
 def inspect(answer, chunks):
-    """Разбирает ответ на проверяемые факты. Ничего не усредняет.
+    """Breaks the answer down into checkable facts. Averages nothing.
 
-    ⚠️ Это НЕ faithfulness. Проверяется только источник: сослалась
-    ли модель на то, что ей дали. Случай «номер верный, срок переврала»
-    этим не ловится, и случай «нужная статья была в контексте, но модель
-    её не взяла» — тоже. Для них нужна разметка человеком.
+    ⚠️ This is NOT faithfulness. It checks the source only: whether the model
+    cited what it was given. The case of "right number, wrong duration" is not
+    caught here, and neither is "the right article was in the context but the
+    model did not use it". Those need human annotation.
     """
     lines = [l for l in answer.splitlines() if l.strip()]
     head = lines[0] if lines else ""
@@ -160,7 +162,7 @@ def inspect(answer, chunks):
     misplaced = False
     if not m:
         m = VERDICT_RE.search(answer)
-        misplaced = bool(m)          # вердикт есть, но не на первой строке
+        misplaced = bool(m)          # the verdict exists, but not on the first line
     verdict = {"回答可能": "ok", "回答不可": "no"}.get(m.group(1)) if m else None
 
     body = VERDICT_RE.sub("", answer).strip()
@@ -170,23 +172,23 @@ def inspect(answer, chunks):
 
     cited = art_key(body)
     source, mentioned = context_arts(chunks)
-    bad_arts = cited - mentioned               # выдумка: в контексте нет нигде
-    transitive = (cited & mentioned) - source  # отсылка из тела чанка
+    bad_arts = cited - mentioned               # fabrication: nowhere in the context
+    transitive = (cited & mentioned) - source  # cross-reference from a chunk body
 
     return {
         "verdict": verdict,
         "verdict_misplaced": misplaced,
-        # 回答不可 и больше ничего — чего не было ни разу в первом прогоне
+        # 回答不可 and nothing else — never seen once in the first run
         "clean_refusal": verdict == "no" and not marks and not cited,
         "partial_refusal": verdict == "no" and bool(marks or cited),
-        # сказала «могу ответить» и тут же оговорилась — перестраховка
+        # said "I can answer" and hedged in the same breath — over-hedging
         "hedged": any(h in body for h in HEDGE),
         "marks": sorted(marks),
         "bad_marks": sorted(bad_marks),
         "cited": _fmt(cited),
         "transitive": _fmt(transitive),
         "bad_arts": _fmt(bad_arts),
-        # сторож от регресса, а не показатель качества: ожидается 1.0
+        # a regression guard, not a quality indicator: 1.0 is expected
         "citation_validity": None if not cited
         else (len(cited) - len(bad_arts)) / len(cited),
         "len": len(body),
@@ -198,21 +200,22 @@ def inspect(answer, chunks):
 KW = dict(mode="vector", expand_query=True, narrow=True, combo=True,
           rerank_on="expanded")
 
-POOL_MULT = 4     # сколько кандидатов брать до схлопывания: TOP_K * POOL_MULT
-ARTICLE_CAP = 3000  # символов; длиннее — статью целиком не собираем
+POOL_MULT = 4     # how many candidates to take before collapsing: TOP_K * POOL_MULT
+ARTICLE_CAP = 3000  # characters; beyond this we do not assemble the whole article
 
 
 def dedupe_by_article(chunks, k):
-    """Один чанк на статью: лучший параграф, остальные отбрасываем.
+    """One chunk per article: keep the best paragraph, drop the rest.
 
-    Список уже отсортирован реранкером, поэтому первое вхождение и есть
-    лучшее — достаточно запомнить виденное.
+    The list is already sorted by the reranker, so the first occurrence is the
+    best one — remembering what has been seen is enough.
 
-    Ключ — (law_id, article_title), а не одно название: 第五条 есть почти
-    в каждом законе корпуса, по одному номеру схлопнутся разные статьи.
+    The key is (law_id, article_title), not the title alone: 第五条 exists in
+    almost every statute in the corpus, so one number would collapse different
+    articles together.
 
-    ⚠️ Это меняет retrieval, а не только показ. В топ-k попадает больше
-    РАЗНЫХ статей → recall@k и MRR сдвинутся. Мерить обе конфигурации.
+    ⚠️ This changes retrieval, not just presentation. More DISTINCT articles
+    reach the top k, so recall@k and MRR shift. Measure both configurations.
     """
     seen, out = set(), []
     for c in chunks:
@@ -230,7 +233,7 @@ _ARTS = None
 
 
 def _by_article():
-    """(law_id, article_title) -> все чанки статьи в порядке параграфов."""
+    """(law_id, article_title) -> every chunk of the article, in paragraph order."""
     global _ARTS
     if _ARTS is None:
         _ARTS = collections.defaultdict(list)
@@ -243,16 +246,17 @@ def _by_article():
 
 
 def whole_article(c, arts):
-    """Заменяет один параграф статьёй целиком.
+    """Replaces a single paragraph with the whole article.
 
-    Зачем: дедуп оставляет лучший параграф по мнению реранкера, а ответ на
-    вопрос может лежать в соседнем пункте той же статьи. На #22 реранкер
-    выбрал 13条 1項 (12 месяцев), а для большинства спрашивающих верно 2項
-    (6 месяцев) — модель его не видела и не могла взять.
+    Why: dedupe keeps the paragraph the reranker rates best, but the answer to
+    the question may sit in a neighbouring paragraph of the same article. On
+    #22 the reranker picked 13条 1項 (twelve months), while for most people
+    asking, 2項 (six months) is the correct one — the model never saw it and
+    could not have used it.
 
-    ⚠️ Уровень 3 чанкинга режет с overlap — соседние куски частично
-    перекрываются. Точные дубли выкидываем, частичные останутся. Это 1.6%
-    корпуса, но если всплывёт в ответах — чинить здесь.
+    ⚠️ Level 3 of the chunker splits with overlap, so adjacent pieces partly
+    repeat. Exact duplicates are dropped, partial ones remain. That is 1.6% of
+    the corpus, but if it ever surfaces in answers, fix it here.
     """
     parts = arts.get((c["law_id"], c["article_title"]), [c])
     total = sum(p["n_chars"] for p in parts)
@@ -273,17 +277,18 @@ def whole_article(c, arts):
 
 
 def retrieve(r, query, mode="dedupe", k=TOP_K, exclude=None):
-    """Сборка контекста. Три режима:
+    """Context assembly. Three modes:
 
-    raw    — топ-k параграфов как есть (базовая линия; дубли едят слоты)
-    dedupe — один лучший параграф на статью (теряет соседние пункты)
-    whole  — k разных статей, каждая целиком
+    raw    — top-k paragraphs as they come (baseline; duplicates eat slots)
+    dedupe — one best paragraph per article (loses neighbouring paragraphs)
+    whole  — k distinct articles, each in full
 
-    Реранкеру всегда отдаём pool = k * POOL_MULT и берём столько же: он всё
-    равно скорит весь пул, так что схлопывание и отсев бесплатны по времени.
+    The reranker always gets pool = k * POOL_MULT and we take the same number:
+    it scores the entire pool regardless, so collapsing and filtering are free
+    in time terms.
 
-    exclude — множество (law_id, article_title), выбрасываемых из пула до
-    отбора топ-k. Нужно для абляции.
+    exclude — a set of (law_id, article_title) removed from the pool before
+    the top-k selection. Needed for the ablation.
     """
     pool = k * POOL_MULT
     cands = r.search(query, k=pool, core_only=True, pool=pool, **KW)
@@ -304,7 +309,7 @@ def load_golden():
 
 
 def cmd_sample(n=5, mode=DEFAULT_MODE):
-    """Сырые ответы глазами. Цифр здесь нет и не должно быть."""
+    """Raw answers, to be read by eye. No numbers here, and there should not be."""
     r = Reranked()
     with httpx.Client() as cl:
         for g in load_golden()[:n]:
@@ -350,9 +355,9 @@ def cmd_eval(mode=DEFAULT_MODE):
             ans = generate(g["q"], ch, cl)
             info = inspect(ans, ch)
 
-            # Попал ли retrieval: есть ли хотя бы одна золотая статья в контексте.
-            # Это разделяет два разных вопроса, которые общая цифра смешивает:
-            # «нашёл ли поиск» и «воспользовалась ли модель тем, что нашлось».
+            # Did retrieval hit: is at least one gold article present in the context.
+            # This separates two different questions that a single number conflates:
+            # "did search find it" and "did the model use what was found".
             gold = {tuple(x) for x in g["relevant"]}
             got = {(c["law_id"], c["article_title"]) for c in ch}
             hit = bool(gold & got)
@@ -389,10 +394,10 @@ def cmd_eval(mode=DEFAULT_MODE):
               f"{sum(r_['citation_validity'] for r_ in with_cit) / len(with_cit):.3f}"
               f"  (сторож, ожидается 1.000)")
 
-    # ─── retrieval против генерации (§4.5) ───
-    # Общая частота отказов ничего не говорит: отказ при промахе поиска —
-    # правильное поведение, отказ при попадании — потеря. Две ошибки,
-    # а не одна, и оптимизировать их надо в разные стороны.
+    # ─── retrieval versus generation (§4.5) ───
+    # The overall refusal rate says nothing: refusing when search missed is
+    # correct behaviour, refusing when it hit is a loss. Two error rates,
+    # not one, and they must be optimised in opposite directions.
     def q(hit, verdict):
         return [r_ for r_ in rows if r_["hit"] is hit and r_["verdict"] == verdict]
 
@@ -420,17 +425,17 @@ def cmd_eval(mode=DEFAULT_MODE):
 
 
 def cmd_ablate(mode=DEFAULT_MODE):
-    """Абляция: у вопросов с попаданием убираем золотую статью из контекста.
+    """Ablation: for questions that hit, remove the gold article from the context.
 
-    Зачем: в обычном прогоне промахов retrieval всего 6, и отказ 0.17
-    против 0.05 на такой выборке неотличим от случайности. Здесь получаем
-    44 контролируемых промаха с реалистичными соседними дистракторами.
+    Why: an ordinary run has only 6 retrieval misses, and 0.17 refusal against
+    0.05 on a sample that size is indistinguishable from chance. This gives 44
+    controlled misses with realistic neighbouring distractors.
 
-    Парный дизайн: те же вопросы, разница ровно в наличии источника.
-    Объяснение «просто вопросы разной трудности» исключено по построению.
+    Paired design: the same questions, differing only in whether the source is
+    present. "Some questions are simply harder" is excluded by construction.
 
-    Исходный прогон (--eval) должен быть сделан: из него берём, какие
-    вопросы были hit, и вердикт для парного сравнения.
+    The baseline run (--eval) must exist: it tells us which questions were a
+    hit, and supplies the verdict for the paired comparison.
     """
     if not report_path(mode).exists():
         sys.exit(f"сначала --eval в режиме {mode}: нужен "
@@ -449,8 +454,8 @@ def cmd_ablate(mode=DEFAULT_MODE):
             ans = generate(g["q"], ch, cl)
             info = inspect(ans, ch)
 
-            # Санитарная проверка: золотой статьи точно нет в контексте.
-            # Без неё весь эксперимент может молча измерять не то.
+            # Sanity check: the gold article is definitely absent from the context.
+            # Without it the whole experiment could silently measure something else.
             assert not (gold & {(c["law_id"], c["article_title"]) for c in ch})
 
             rows.append({"id": g["id"], "q": g["q"], "answer": ans,
@@ -470,9 +475,9 @@ def cmd_ablate(mode=DEFAULT_MODE):
     print(f"отказалась:          {len(refused):>3}  = {len(refused) / n:.2f}  (выше — лучше)")
     print(f"ответила по соседней: {len(substituted):>3}  = {len(substituted) / n:.2f}")
 
-    # Парная таблица: тот же вопрос с источником и без него.
-    # Если модель чувствует наличие источника, вес должен уйти
-    # в клетку «было 回答可能 → стало 回答不可».
+    # Paired table: the same question with the source and without it.
+    # If the model senses the presence of a source, the mass should move
+    # into the "was 回答可能 -> became 回答不可" cell.
     def cell(b, a):
         return sum(1 for x in rows if x["verdict_base"] == b and x["verdict"] == a)
 

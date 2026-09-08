@@ -1,26 +1,27 @@
-"""Бланк для ручной разметки ответов — эталон под будущего судью-LLM.
+"""A form for manual annotation of answers — the reference set for an LLM judge.
 
-Зачем: #31 (нужная статья в контексте, модель её не взяла) не виден ни
-citation_validity, ни вердикту, ни гейту по score. Такие случаи ловятся
-только человеком. Двадцать размеченных вопросов станут набором, на котором
-проверяется LLM-судья ДО того, как ему поверят — иначе судья будет таким же
-непроверенным инструментом, как HNSW с дефолтным ef_search.
+Why: #31 (the right article was in the context, the model did not take it) is
+invisible to citation_validity, to the verdict and to the score gate. Cases
+like that are only caught by a human. Twenty annotated questions become the
+set on which an LLM judge is checked BEFORE it is trusted — otherwise the
+judge is as unverified an instrument as HNSW with its default ef_search.
 
-ВЫБОРКА (правило записано до генерации):
-    из вопросов с hit — систематическая выборка каждого второго по id,
-    первые 20. Не случайная и не «интересные»: golden упорядочен по законам,
-    поэтому шаг по id сохраняет покрытие доменов, а отбор «интересных» был бы
-    подгонкой калибровочного набора под известные проблемы.
+SAMPLING (the rule was written before generating):
+    from the questions that hit — a systematic sample of every second one by
+    id, first 20. Not random and not "the interesting ones": the golden set is
+    ordered by statute, so a step over ids preserves domain coverage, while
+    picking "interesting" cases would fit the calibration set to known problems.
 
-ТРИ ФЛАГА, независимые друг от друга:
-    substance  — ответил ли по существу вопроса: full / partial / none
-    distortion — исказил ли содержание нормы (неверный срок, сумма,
-                 обязанность подана как рекомендация): yes / no
-    extra      — притащил ли постороннее из мусорных чанков: yes / no
+THREE FLAGS, independent of one another:
+    substance  — does it answer the question: full / partial / none
+    distortion — does it distort the norm (wrong period, wrong amount, a duty
+                 presented as a recommendation): yes / no
+    extra      — does it drag in unrelated material from junk chunks: yes / no
 
-Почему три, а не одна оценка: ответ может быть по существу верным и при этом
-тащить мусор (#4, #5), а может верно цитировать статью и переврать срок —
-это разные дефекты с разной ценой, усреднять их нельзя.
+Why three rather than one score: an answer can be substantively right and
+still carry junk (#4, #5), or cite the article correctly and get the period
+wrong. These are different defects with different costs; averaging them is
+not allowed.
 
   uv run python src/make_review.py
 """
@@ -93,7 +94,7 @@ def main():
 
 
 def parse():
-    """Читает заполненный бланк. Вызывается из будущего сравнения с судьёй."""
+    """Reads the filled-in form. Called from the future comparison with the judge."""
     text = OUT.read_text(encoding="utf-8")
     out = {}
     for block in text.split("## #")[1:]:

@@ -1,10 +1,10 @@
-"""Нарезка корпуса японского трудового права на чанки.
+"""Chunking the Japanese labour law corpus.
 
-Правила:
-  1. Базовая единица — Paragraph (медиана 91 токен, p90 = 291).
-  2. Параграф длиннее MAX_CHARS режем по Item.
-  3. Item длиннее MAX_CHARS режем по предложениям с нахлёстом.
-Выбрасываем: SupplProvision (附則, 37.6%), статьи 削除, статьи 読替え.
+Rules:
+  1. The base unit is a Paragraph (median 91 tokens, p90 = 291).
+  2. A paragraph longer than MAX_CHARS is split by Item.
+  3. An Item longer than MAX_CHARS is split by sentence, with overlap.
+Dropped: SupplProvision (附則, 37.6%), 削除 articles, 読替え articles.
 """
 
 import json
@@ -18,13 +18,13 @@ RAW = ROOT / "data" / "raw"
 MANIFEST = ROOT / "data" / "manifest.json"
 OUT = ROOT / "data" / "chunks.jsonl"
 
-MAX_CHARS = 800          # порог, после которого режем глубже
-OVERLAP_SENT = 1         # предложений внахлёст на уровне 3
+MAX_CHARS = 800          # threshold past which we split deeper
+OVERLAP_SENT = 1         # sentences of overlap at level 3
 SKIP_CAPTION = ("読替え", "読み替え")
 
 
 def norm(s):
-    """В японском юридическом тексте пробелы — только отступы XML."""
+    """In Japanese legal text whitespace is nothing but XML indentation."""
     return re.sub(r"\s+", "", s or "")
 
 
@@ -40,7 +40,7 @@ PAIRS = [("（", "）"), ("「", "」"), ("(", ")"), ("『", "』")]
 
 
 def balanced(s):
-    """Точка 。 встречается внутри скобок — там резать нельзя."""
+    """The 。 full stop occurs inside brackets — no splitting there."""
     return all(s.count(o) == s.count(c) for o, c in PAIRS)
 
 

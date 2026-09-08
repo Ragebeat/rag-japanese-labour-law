@@ -1,11 +1,11 @@
-"""Японские числа и ссылки на статьи — общий разбор.
+"""Japanese numerals and article references — shared parsing.
 
-Вынесено из generate.py: тем же разбором пользуется expand_golden.py,
-а тянуть туда весь конвейер поиска ради двух функций незачем.
+Lifted out of generate.py: expand_golden.py uses the same parsing, and
+pulling the whole search pipeline in there for two functions makes no sense.
 
-Номера статей в корпусе всегда кандзи (第三十九条), в тексте модели и в
-запросах — как придётся (第39条 / 第３９条). Сравнивать надо канонический
-вид с обеих сторон.
+Article numbers in the corpus are always kanji (第三十九条); in model output
+and in queries they come however they come (第39条 / 第３９条). Comparison has
+to happen on a canonical form on both sides.
 """
 
 import re
@@ -17,7 +17,7 @@ _UNIT = {"十": 10, "百": 100, "千": 1000}
 
 
 def kanji_int(s):
-    """三十九 → 39, 百三十 → 130. None, если не кандзи-число."""
+    """三十九 -> 39, 百三十 -> 130. None if this is not a kanji numeral."""
     total = cur = 0
     for ch in s:
         if ch in _DIG:
@@ -37,12 +37,12 @@ def num(s):
 
 NUM = "[0-9０-９〇一二三四五六七八九十百千]+"
 
-# Любое упоминание статьи: 第39条, 第九条の二
+# Any mention of an article: 第39条, 第九条の二
 ART_RE = re.compile(rf"第({NUM})条(?:の({NUM}))?")
 
-# Ссылка на статью РОДИТЕЛЬСКОГО закона из подзаконного акта:
-# 「法第三十九条第七項の厚生労働省令で定める…」. В 施行規則 конструкция 法第N条
-# по соглашению всегда указывает на свой закон, другого «法» там нет.
+# A reference to an article of the PARENT statute from an ordinance:
+# 「法第三十九条第七項の厚生労働省令で定める…」. Inside a 施行規則 the form 法第N条
+# always points at its own statute by convention; there is no other 「法」 there.
 REF_RE = re.compile(rf"法第({NUM})条(?:の({NUM}))?")
 
 
@@ -56,12 +56,12 @@ def _keys(rx, text):
 
 
 def art_key(text):
-    """Все упомянутые статьи как канонические пары: 第39条の2 → (39, 2)."""
+    """Every article mentioned, as canonical pairs: 第39条の2 -> (39, 2)."""
     return _keys(ART_RE, text)
 
 
 def ref_key(text):
-    """Только ссылки вида 法第N条 — на родительский закон."""
+    """Only references of the form 法第N条 — to the parent statute."""
     return _keys(REF_RE, text)
 
 

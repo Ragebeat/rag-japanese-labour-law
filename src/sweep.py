@@ -1,8 +1,9 @@
-"""Перебор конфигураций гибридного поиска на golden dataset.
+"""Sweeping hybrid search configurations over the golden dataset.
 
-⚠️ golden — всего 50 вопросов. Крутить параметры до красивой цифры =
-подгонять под эти 50, а не улучшать поиск. Поэтому здесь ПЯТЬ
-осмысленных вариантов, а не сетка. Разница <0.02 — шум, не улучшение.
+⚠️ The golden set is only 50 questions. Turning knobs until the number looks
+good is fitting to those 50, not improving search. So this file holds FIVE
+meaningful variants rather than a grid. A difference below 0.02 is noise,
+not an improvement.
 
   python src/sweep.py
 """
@@ -20,7 +21,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
 OUT = ROOT / "data" / "sweep.json"
 
-BASELINE = 0.820     # recall@5, словарь + LLM fallback
+BASELINE = 0.820     # recall@5, dictionary + LLM fallback
 
 BEST = dict(mode="vector", expand_query=True, narrow=True, combo=True)
 
@@ -96,7 +97,7 @@ def main():
     if best[1]["metrics"]["recall@5"] - BASELINE < 0.02:
         print("⚠️ выигрыш меньше 0.02 — в пределах шума на 50 вопросах")
 
-    # что именно починило расширение запроса
+    # what exactly the query expansion fixed
     def ok(p):
         return p is not None and p <= 5
 

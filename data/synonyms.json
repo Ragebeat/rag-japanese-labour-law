@@ -1,5 +1,5 @@
 {
-  "_comment": "Разговорный термин → как написано в тексте закона. Первый элемент списка — основной, его берёт режим narrow. Добавлять только то, что точно есть в законе — проверять через src/toc.py --find",
+  "_comment": "Colloquial term -> how it is written in the statutory text. The first element of each list is the primary one, used by narrow mode. Only add what is actually present in the law — verify with src/toc.py --find",
 
   "有給": ["年次有給休暇"],
   "有休": ["年次有給休暇"],

@@ -1,28 +1,28 @@
-"""Второй проход: проверка ответа против контекста отдельной моделью.
+"""The verification pass: checking an answer against the context with a separate model.
 
-ЗАЧЕМ НЕ ПРОСТО faithfulness. Проверено на наших худших случаях — она их
-не ловит:
-  #7  «девяносто дней» взяты из 労組法15条, которая ЛЕЖАЛА в контексте
-  #43 «десять дней» взяты из 39条1項, которая тоже лежала
-Оба утверждения из контекста следуют. Согласуется с замерами: выдуманных
-ссылок 0 из 50, distortion 3 из 20 — того, что ловит faithfulness, у нас
-почти нет.
+WHY NOT PLAIN faithfulness. Tested on our worst cases — it does not catch them:
+  #7  the "ninety days" came from 労組法15条, which WAS in the context
+  #43 the "ten days" came from 39条1項, which was there too
+Both statements follow from the context. This matches the measurements:
+0 fabricated citations out of 50, distortion in 3 of 20 — there is almost
+nothing here of the kind faithfulness catches.
 
-Поэтому три проверки, из них полезны две:
-  適用 — применима ли процитированная статья к спрошенному
-         (ловит подмену института: 16 случаев из 30 в абляции)
-  欠落 — было ли в контексте положение, меняющее ответ, и не взято ли оно
-         (ловит #43, #22, #19, #31)
-  矛盾 — следует ли сказанное из контекста (классическая faithfulness)
+Hence three checks, two of which are useful:
+  適用 — is the cited article applicable to what was asked
+         (catches substituted institutions: 16 cases out of 30 in the ablation)
+  欠落 — was there a provision in the context that changes the answer, and was
+         it left unused (catches #43, #22, #19, #31)
+  矛盾 — does what is said follow from the context (classic faithfulness)
 
-СУДЬЯ — ДРУГОГО СЕМЕЙСТВА, чем генератор. Тот же gemma был бы слеп там же,
-где генератор, и мы измерили бы согласие модели с самой собой.
+THE JUDGE IS FROM A DIFFERENT FAMILY than the generator. The same gemma would
+be blind in the same places as the generator, and we would be measuring a
+model's agreement with itself.
 
-Судья выдаёт контролируемые токены, а не прозу — приём из занятия 7,
-сработавший дважды (маркер [N], вердикт 判定).
+The judge emits controlled tokens rather than prose — the technique from
+session 7 that has now worked twice (the [N] marker, the 判定 verdict).
 
-  uv run python src/verify.py --calibrate   # 20 вопросов против ручной разметки
-  uv run python src/verify.py               # весь отчёт текущего режима
+  uv run python src/verify.py --calibrate   # 20 questions against manual annotation
+  uv run python src/verify.py               # the full report for the current mode
 """
 
 import difflib
@@ -41,13 +41,13 @@ from make_review import parse as parse_manual  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 URL = "http://localhost:11434/api/chat"
-# Судья должен быть ДРУГОГО семейства, чем генератор (gemma):
-# тот же был бы слеп там же, где генератор.
-# Меняется переменной среды, чтобы сравнение судей было воспроизводимым,
-# а не правкой константы между прогонами.
+# The judge must be from a DIFFERENT family than the generator (gemma):
+# the same one would be blind in the same places as the generator.
+# Set by an environment variable so judge comparisons are reproducible
+# rather than a constant edited between runs.
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen3:8b")
 
-# ⚠️ В примерах формата нет реальных статей — урок занятия 5.
+# ⚠️ No real articles appear in the format examples — lesson from session 5.
 SYSTEM = """あなたは法令回答の検証者です。回答そのものは書きません。
 
 【入力】質問・提供された条文・回答・回答が引用した番号
@@ -80,9 +80,9 @@ def judge(question, chunks, answer, client=None):
     own = client is None
     client = client or httpx.Client()
     try:
-        # Список цитат даём явно. Без него судья оценивал все пять чанков
-        # контекста, то есть переделывал работу retrieval вместо проверки
-        # ответа — отсюда 13 блокировок из 20 в первой калибровке.
+        # The list of citations is passed explicitly. Without it the judge scored all
+        # five context chunks, i.e. redid retrieval's work instead of checking the
+        # answer — hence 13 blocks out of 20 in the first calibration.
         cited = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)
                         if 1 <= int(m) <= len(chunks)})
         cited_str = " ".join(f"[{i}]" for i in cited) or "なし"
@@ -105,7 +105,7 @@ def judge(question, chunks, answer, client=None):
 
 
 def parse_verdict(text, n_chunks):
-    """Разбирает три строки судьи. Ничего не усредняет."""
+    """Parses the judge's three lines. Averages nothing."""
     def line(key):
         m = LINE_RE[key].search(text)
         return m.group(1).strip() if m else None
@@ -123,14 +123,14 @@ def parse_verdict(text, n_chunks):
 
     missing, contra = filled("欠落"), filled("矛盾")
 
-    # Судья ссылался на [4] при трёх чанках — чистим и здесь тоже.
+    # The judge referenced [4] when there were three chunks — clean that here too.
     if missing:
         idx = [int(m) for m in re.findall(r"\[(\d+)\]", missing)]
         if idx and not all(1 <= i <= n_chunks for i in idx):
             missing = ""
-    # На месте противоречия должно быть УТВЕРЖДЕНИЕ, а не название
-    # статьи. Судья вписывал 「労働者災害補償保険法 第十三条」 — слот заполнен,
-    # регекс доволен, содержания нет.
+    # The contradiction slot must hold a STATEMENT, not an article name.
+    # The judge wrote 「労働者災害補償保険法 第十三条」 — the slot is filled,
+    # the regex is satisfied, and there is no content.
     if contra and re.fullmatch(r"[^\u3002]{0,40}第[^\u3002]{1,12}条[^\u3002]{0,20}", contra):
         contra = ""
     return {
@@ -139,8 +139,8 @@ def parse_verdict(text, n_chunks):
         "inapplicable": bad,
         "missing": missing or "",
         "contradiction": contra or "",
-        # блокируем: неприменимая ссылка ИЛИ пропущенное положение
-        # (решение зафиксировано в занятии 8: omission блокирует наравне)
+        # block on: an inapplicable citation OR a missing provision
+        # (decided in session 8: omission blocks on equal terms)
         "block": bool(bad) or bool(missing) or bool(contra),
     }
 
@@ -158,14 +158,14 @@ def run(rows, mode, client, r):
 
 
 def cmd_calibrate():
-    """Судья против ручной разметки. Согласие по каждому флагу отдельно.
+    """The judge against the manual annotation. Agreement per flag, separately.
 
-    ⚠️ Метки в manual_review.md проставлены агентом (Claude), не человеком.
-    Это согласие двух моделей, а не согласие с истиной. Записано явно,
-    чтобы через месяц не принять одно за другое.
+    ⚠️ The labels in manual_review.md were assigned by an agent (Claude), not
+    by a human. This is agreement between two models, not agreement with the
+    truth. Written down explicitly so the two are not confused a month from now.
 
-    Разметка делалась на режиме dedupe — судим те же ответы в том же
-    режиме, иначе сравнивать нечего.
+    The annotation was made in dedupe mode — we judge the same answers in the
+    same mode, or there is nothing to compare.
     """
     manual = parse_manual()
     if not manual:
@@ -181,7 +181,7 @@ def cmd_calibrate():
     with httpx.Client() as cl:
         res = run(rows, "dedupe", cl, r)
 
-    # Сопоставление флагов судьи и ручных меток
+    # Mapping between the judge's flags and the manual labels
     pairs = {
         "欠落 ~ partial": (lambda v: bool(v["missing"]),
                           lambda m: m["substance"] == "partial"),
@@ -233,36 +233,36 @@ def cmd_full(mode=DEFAULT_MODE):
     print(f"→ {out}")
 
 
-# ────────────── структурная проверка полноты ──────────────
-# Четыре судьи (8B … 120B) провалили 欠落: лучший результат 3 из 4 при
-# шести ложных, и качество не растёт с размером. Значит класс надо ловить
-# не моделью, а структурой.
+# ────────────── structural completeness check ──────────────
+# Four judges (8B ... 120B) failed 欠落: the best result was 3 of 4 with six
+# false positives, and quality does not grow with size. So this class has to
+# be caught structurally rather than by a model.
 #
-# Правило без единого настраиваемого числа:
-#   параграф статьи считается пропущенным, если он НЕ использован в ответе,
-#   а реранкер оценил его НЕ НИЖЕ, чем тот, который использован.
+# A rule with no tunable number in it:
+#   a paragraph counts as omitted if the answer does NOT use it while the
+#   reranker scores it NO LOWER than the one that was used.
 #
-# Порога нет → подганять на двадцати точках нечего.
+# No threshold -> nothing to fit on twenty data points.
 
-USED_MIN = 10   # символов общей подстроки — параграф считается использованным
+USED_MIN = 10   # characters of common substring — the paragraph counts as used
 
 
 def _used(paragraph, answer):
-    """Взят ли параграф в ответ.
+    """Was the paragraph used in the answer.
 
-    Юридические ответы цитируют почти дословно (六箇月間継続勤務し全労働日の
-    八割以上出勤), поэтому длинная общая подстрока — надёжный признак.
+    Legal answers quote almost verbatim (六箇月間継続勤務し全労働日の八割以上出勤),
+    so a long common substring is a reliable signal.
     """
     m = difflib.SequenceMatcher(None, paragraph, answer, autojunk=False)
     return m.find_longest_match(0, len(paragraph), 0, len(answer)).size >= USED_MIN
 
 
 def structural_omission(question, chunks, answer, rr):
-    """Статьи, где ответ взял один параграф, а соседний не хуже по скору.
+    """Articles where the answer took one paragraph while a neighbour scores no lower.
 
-    ⚠️ Имеет смысл ТОЛЬКО в режиме whole. На dedupe в контексте лежит один
-    параграф, и флаг «не взял 2項» означал бы, что модели его не давали —
-    то же заблуждение, что разобрано на #22.
+    ⚠️ This only makes sense in whole mode. In dedupe the context holds a
+    single paragraph, so flagging "did not take 2項" would mean the model was
+    never given it — the same mistake that was worked through on #22.
     """
     arts = _by_article()
     cited = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)

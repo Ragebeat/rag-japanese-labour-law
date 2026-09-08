@@ -1,29 +1,30 @@
-"""Расширение golden по правилу A — предложение, не применение.
+"""Expanding the golden set under rule A — a proposal, not an application.
 
-ПРАВИЛО A (сформулировано ДО просмотра результата, применяется ко всем 50):
-    статья 施行規則 / 施行令 засчитывается наравне со статьёй закона из
-    relevant, если она явно ссылается на неё конструкцией 「法第N条…」.
+RULE A (written down BEFORE looking at the result, applied to all 50):
+    an article of a 施行規則 / 施行令 counts alongside the statutory article
+    in `relevant` if it explicitly references it as 「法第N条…」.
 
-УТОЧНЕНИЕ после первого прогона (193 статьи на 35 вопросов — размывание):
-    только если подзаконная статья ссылается не более чем на MAX_PARENTS
-    родительских статей.
+REFINEMENT after the first run (193 articles across 35 questions — dilution):
+    only if the ordinance article references no more than MAX_PARENTS
+    parent articles.
 
-Почему: 第六条の二 (выбор представителя большинства) ссылается сразу на
-法第18条, 第24条, 第32条の2, 第39条 и далее — и приехала в пять разных
-вопросов. Это процедурная втулка, а не раскрытие нормы. Ссылается на одну
-статью — это её реализация; на восемь — общий механизм.
+Why: 第六条の二 (selecting the majority representative) references 法第18条,
+第24条, 第32条の2, 第39条 and more at once — and landed in five different
+questions. That is procedural plumbing, not the implementation of a norm.
+Referencing one article means implementing it; referencing eight means it is
+a general mechanism.
 
-⚠️ Ось «заголовок против тела» оказалась не той: 第六条の二 перечисляет
-родительские статьи прямо в заголовке и проходит строгий режим тоже.
+⚠️ The "caption versus body" axis turned out to be the wrong one: 第六条の二
+lists its parent articles right in the caption and passes the strict mode too.
 
-⚠️ Скрипт НИЧЕГО не перезаписывает. Он пишет golden_proposed.jsonl и
-golden_review.md рядом. Каждый кандидат должен быть просмотрен глазами:
-правило задаёт границу поиска, но не отменяет проверку по существу — ровно
-как формальное правило отбора ядра в занятии 1 потребовало ручных исключений.
+⚠️ The script OVERWRITES NOTHING. It writes golden_proposed.jsonl and
+golden_review.md alongside. Every candidate has to be reviewed by eye: the
+rule sets the search boundary, it does not replace judgement on the merits —
+just as the formal rule for selecting the core corpus needed manual exceptions.
 
   uv run python src/expand_golden.py              # MAX_PARENTS=1
-  uv run python src/expand_golden.py --parents 2  # мягче
-  uv run python src/expand_golden.py --caption    # ссылка только в заголовке
+  uv run python src/expand_golden.py --parents 2  # looser
+  uv run python src/expand_golden.py --caption    # reference in the caption only
 """
 
 import collections
@@ -41,17 +42,17 @@ GOLDEN = DATA / "golden.jsonl"
 PROPOSED = DATA / "golden_proposed.jsonl"
 REVIEW = DATA / "golden_review.md"
 
-# Вопросы, где расхождение не «закон и подзаконка», а два разных института.
-# Правило A их не берёт и не должно: под них пришлось бы придумывать
-# правило B, а это узаконивание любого расширения задним числом.
-# Метрику по ним даём отдельной строкой, а не подкручиваем.
+# Questions where the mismatch is not "statute versus ordinance" but two
+# different legal institutions. Rule A does not take them, and should not:
+# covering them would need a rule B, which legitimises any retrofitted
+# expansion. We report them on a separate line instead of tuning the metric.
 DISPUTED = {
     20: "育介法17条 (制限) против 育介則76条; сам вопрос спорен — в 育休 не работают",
     24: "労契法18条 даёт 無期転換 ≠ 正社員; パート有期法13条 про 転換措置",
     38: "派遣法40条の6 = みなし при незаконном派遣; 40条の4 = обычный путь",
 }
 
-# Подзаконка, которую шаблон «X施行規則» не ловит (см. занятие 1).
+# Ordinances the "X施行規則" pattern does not catch.
 EXTRA_SUB = {
     "労働安全衛生法": ["労働安全衛生規則"],
 }
@@ -59,7 +60,7 @@ EXTRA_SUB = {
 
 def load_chunks():
     laws = {}                                    # law_id -> law_title
-    arts = collections.defaultdict(dict)         # law_id -> article_title -> текст
+    arts = collections.defaultdict(dict)         # law_id -> article_title -> text
     for line in CHUNKS.open(encoding="utf-8"):
         c = json.loads(line)
         laws[c["law_id"]] = c["law_title"]
@@ -70,7 +71,7 @@ def load_chunks():
 
 
 def sub_laws(laws):
-    """parent_law_id -> [sub_law_id] для 施行令 / 施行規則."""
+    """parent_law_id -> [sub_law_id] for 施行令 / 施行規則."""
     by_title = {}
     for lid, title in laws.items():
         by_title.setdefault(title, lid)
@@ -111,7 +112,7 @@ def main():
                     if not (keys & refs):
                         continue
                     if len(refs) > max_parents:
-                        # втулка: раскрывает не эту норму, а сразу много
+                        # plumbing: implements many norms at once rather than this one
                         hubs[f"{laws[sub_id]} {sub_art}"] = len(refs)
                         continue
                     pair = [sub_id, sub_art]

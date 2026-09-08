@@ -1,8 +1,8 @@
-"""Оценка retrieval на golden dataset.
+"""Retrieval evaluation on the golden dataset.
 
-recall@k — доля вопросов, где ХОТЯ БЫ ОДНА релевантная статья попала в топ-k.
-Пользователю нужен ответ, а не полный свод — поэтому одной достаточно.
-MRR — средняя 1/позиция первого попадания.
+recall@k — the share of questions where AT LEAST ONE relevant article made
+the top k. The user needs an answer, not an exhaustive digest, so one is
+enough. MRR — the mean of 1/position of the first hit.
 
   python src/eval.py
 """
@@ -21,7 +21,7 @@ MAXK = max(KS)
 
 
 def first_hit(results, relevant):
-    """Позиция (1-based) первого попадания или None."""
+    """Position (1-based) of the first hit, or None."""
     want = {(law, art) for law, art in relevant}
     for i, (_score, c) in enumerate(results, 1):
         if (c["law_id"], c["article_title"]) in want:

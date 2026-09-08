@@ -1,17 +1,19 @@
-"""Reranking через cross-encoder поверх векторного поиска.
+"""Reranking with a cross-encoder on top of vector search.
 
-Зачем: текущие цифры recall@10 = 0.90 при r@1 = 0.48. Нужное почти
-всегда в десятке, но наверху лишь в половине случаев.
+Why: the current numbers are recall@10 = 0.90 at r@1 = 0.48. What is needed
+is almost always in the top ten, but at the top only half the time.
 
-Bi-encoder (BGE-M3) кодирует запрос и документ НЕЗАВИСИМО → векторы
-предпосчитаны, поиск = одно умножение. Быстро, но грубо.
-Cross-encoder подаёт пару ВМЕСТЕ на вход → видит взаимодействие слов.
-Точнее, но нельзя предпосчитать — модель гоняется на каждую пару.
+A bi-encoder (BGE-M3) encodes query and document INDEPENDENTLY, so vectors
+can be precomputed and search is a single multiplication. Fast but coarse.
+A cross-encoder feeds the pair in TOGETHER and sees the interaction between
+words. More accurate, but nothing can be precomputed — the model runs on
+every pair.
 
-Отсюда схема: bi-encoder достаёт топ-N быстро, cross-encoder переупорядочивает.
+Hence the scheme: the bi-encoder pulls the top N quickly, the cross-encoder
+reorders it.
 
-⚠️ Реранкер НЕ поднимет recall@N при том же N — он не ищет заново,
-а переставляет уже найденное. Растут r@1, r@3, MRR.
+⚠️ The reranker will NOT raise recall@N for the same N — it does not search
+again, it rearranges what was already found. r@1, r@3 and MRR go up.
 
   python src/rerank.py "育休っていつまで？"
 """
@@ -24,7 +26,7 @@ from hybrid import Hybrid  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
 
 MODEL = "BAAI/bge-reranker-v2-m3"
-POOL = 20          # сколько кандидатов отдать реранкеру
+POOL = 20          # how many candidates to hand to the reranker
 
 _model = None
 
@@ -39,21 +41,21 @@ def _get():
 
 
 class Reranked:
-    """Обёртка над Hybrid: достаёт кандидатов и переупорядочивает."""
+    """A wrapper over Hybrid: fetches candidates and reorders them."""
 
     def __init__(self, hybrid=None):
         self.h = hybrid or Hybrid()
 
     def search(self, query, k=10, core_only=True, pool=POOL,
                rerank_on="original", **kw):
-        """rerank_on: что подавать cross-encoder'у.
+        """rerank_on: what to feed the cross-encoder.
 
-        'original'  — исходный разговорный вопрос
-        'expanded'  — расширенный словарём/LLM
+        'original'  — the original colloquial question
+        'expanded'  — expanded by the dictionary and the LLM
 
-        Гипотеза: cross-encoder читает пару целиком и может лучше
-        понять оригинальный вопрос, а добавленные термины ему шум.
-        Но это гипотеза — меряем оба варианта.
+        Hypothesis: the cross-encoder reads the pair as a whole and may do
+        better on the original question, with the added terms acting as noise.
+        But that is a hypothesis — we measure both.
         """
         cands = self.h.search(query, k=pool, core_only=core_only, **kw)
         if not cands:
@@ -74,14 +76,14 @@ class Reranked:
         return cands[:k]
 
     def score(self, query, texts, rerank_on="expanded"):
-        """Скорит произвольные тексты против запроса, без поиска в БД.
+        """Scores arbitrary texts against a query, without searching the database.
 
-        Нужно для структурной проверки полноты (verify.py): сравнить
-        параграфы одной статьи между собой.
+        Needed for the structural completeness check (verify.py): comparing
+        paragraphs of one article against each other.
 
-        rerank_on по умолчанию 'expanded' — тот же вариант, что в рабочей
-        конфигурации (KW в generate.py). Иначе баллы окажутся в другой
-        шкале, чем те, по которым чанки отбирались.
+        rerank_on defaults to 'expanded' — the same variant as the working
+        configuration (KW in generate.py). Otherwise the scores would be on a
+        different scale from the ones the chunks were selected by.
         """
         if not texts:
             return []

@@ -5,7 +5,7 @@ import time
 import requests
 
 BASE = "https://laws.e-gov.go.jp/api/2"
-LIST_PATH = "/laws"  # ← сверить со swagger
+LIST_PATH = "/laws"  # <- check against the swagger spec
 CATEGORY = "020"
 LIMIT = 100
 OUT = pathlib.Path("data/manifest.json")

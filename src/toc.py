@@ -1,8 +1,8 @@
-"""Просмотр оглавления закона и текста статьи — для проверки golden dataset.
+"""Browsing a statute's table of contents and article text — to verify the golden set.
 
-  python src/toc.py 育児                 — оглавление закона по куску названия
-  python src/toc.py 育児 第五条           — текст конкретной статьи
-  python src/toc.py --find 看護休暇       — в каких статьях встречается слово
+  python src/toc.py 育児                 — contents of a statute matched by name fragment
+  python src/toc.py 育児 第五条           — the text of one article
+  python src/toc.py --find 看護休暇       — which articles contain a given word
 """
 
 import json
@@ -20,7 +20,7 @@ def load():
 
 
 def match_law(c, law_key):
-    """law_key — точный law_id либо кусок названия."""
+    """law_key — either an exact law_id or a fragment of the title."""
     return law_key == c["law_id"] or law_key in c["law_title"]
 
 
