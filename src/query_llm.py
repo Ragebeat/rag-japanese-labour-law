@@ -35,7 +35,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "llm_expand_cache.json"
 GOLDEN = ROOT / "data" / "golden.jsonl"
 
-MODEL = os.environ.get("LLM_MODEL", "qwen3:8b")
+MODEL = os.environ.get("LLM_MODEL", "gemma4:e4b")
 URL = "http://localhost:11434/api/chat"
 MAX_TERMS = 4
 
