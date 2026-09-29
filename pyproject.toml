@@ -17,3 +17,14 @@ dependencies = [
     "sudachipy>=0.6.11",
     "uvicorn[standard]>=0.52.4",
 ]
+
+# torch comes transitively via sentence-transformers, CPU-only (PyPI serves
+# CPU wheels on Windows). This is deliberate — decided 2026-09-29:
+#  - the GPU is a GTX 1060 6 GB (Pascal, sm_61). Current CUDA wheels (cu128+)
+#    have no Pascal kernels: torch reports CUDA available and then fails at
+#    the first kernel with "no kernel image". cu126 is the last index that
+#    supports it, and may carry no Python 3.14 wheels.
+#  - the 6 GB are already taken by Ollama (gemma4 + bge-m3 do not fit
+#    together). A resident 2 GB cross-encoder would push gemma partly onto
+#    the CPU: a faster rerank for a slower generation.
+# All phase 4-6 measurements were made with the reranker on the CPU.
