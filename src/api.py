@@ -30,8 +30,8 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import rerank  # noqa: E402
-from generate import (DEFAULT_MODE, MODEL, SYSTEM, TOP_K,  # noqa: E402
-                      Reranked, build_context, inspect, retrieve)
+from generate import (DEFAULT_MODE, GEN_OPTIONS, MODEL, SYSTEM,  # noqa: E402
+                      TOP_K, Reranked, build_context, inspect, retrieve)
 
 OLLAMA = "http://localhost:11434/api/chat"
 
@@ -113,7 +113,7 @@ async def ask(req: Ask):
              "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{req.q}"},
         ],
         "stream": False, "think": False,
-        "options": {"temperature": 0},
+        "options": GEN_OPTIONS,
     })
     r.raise_for_status()
     return _payload(req.q, chunks, r.json()["message"]["content"].strip())
@@ -148,7 +148,7 @@ async def ask_stream(req: Ask):
                  "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{req.q}"},
             ],
             "stream": True, "think": False,
-            "options": {"temperature": 0},
+            "options": GEN_OPTIONS,
         }
         parts = []
         try:

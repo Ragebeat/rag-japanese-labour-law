@@ -13,6 +13,7 @@ number for human readers, and that is verified a second, independent way.
   python src/generate.py "有給って入社してすぐもらえるの？"
   python src/generate.py --sample     # 5 questions raw, to read by eye
   python src/generate.py --eval       # run over the golden set
+  python src/generate.py --eval --base     # the phase 4 prompt, without verbatim quotes
 """
 
 import collections
@@ -21,6 +22,7 @@ import os
 import pathlib
 import re
 import sys
+import unicodedata
 
 import httpx
 
@@ -59,7 +61,7 @@ REFUSAL = "該当する規定が見つかりません"
 # expressed refusal in ten different phrasings and never once cleanly.
 # Same technique as the [N] marker: have the model emit a token we control
 # instead of digging meaning out of free text.
-SYSTEM = f"""あなたは日本の労働法令の検索結果を要約するアシスタントです。
+SYSTEM_BASE = f"""あなたは日本の労働法令の検索結果を要約するアシスタントです。
 
 【出力形式】
 1行目に必ず「判定: 回答可能」または「判定: 回答不可」とだけ書く。
@@ -74,6 +76,39 @@ SYSTEM = f"""あなたは日本の労働法令の検索結果を要約するア�
    関連しそうな条文を列挙したり、前置きを書いたりしない
 4. 数字・日数・金額は条文にある通りに引用する。推測しない
 5. 本文は3〜5文で簡潔に"""
+
+# Phase 6: the verbatim-quote variant. Five answers in phase 5 had the right
+# article and a wrong detail; the one class this makes CHECKABLE is a quote
+# that is not really a quote (two exceptions spliced into one, text put under
+# another article's number). The check sees only what is inside 「」:
+# paragraph numbers, paraphrase and omissions stay invisible to it.
+# Rule 7 is a separate, cheaper net: a number outside quotes is unverified.
+SYSTEM_QUOTES = SYSTEM_BASE + """
+6. 答えの核心（数字・期間・要件・例外）は、条文から一字一句そのまま「」で引用し、
+   直後にその条文の番号を付ける。形式:「引用文」[N]
+   「」の中は言い換えない・要約しない・別々の文をつなぎ合わせない。
+   別の文を引用するときは、別の「」にする
+7. 数字・日数・期間は「」の引用の中にだけ書く"""
+
+# The default since phase 6 (29.09), measured on golden against the base
+# prompt: claim coverage 0.09 -> 0.68, answers with numbers outside quotes
+# 22 -> 11, over-refusal 0 -> 0, refusal on retrieval miss 0.17 -> 0.17 (the
+# same five blind answers). One suspected regression: #26 dropped the key
+# article (労契法 第十条) — one case, not separable from run-to-run noise.
+# SYSTEM_BASE stays: the phase 4 ablation is paired with a base-prompt report.
+SYSTEM = SYSTEM_QUOTES
+
+# Generation options — ONE copy, imported by api.py. The first num_ctx fix
+# (phase 6) patched generate() and missed api.py's two own requests: three
+# copies of the same dict, one of them updated.
+#
+# num_ctx is explicit on purpose. check_ctx.py: prompts run up to ~7 000
+# tokens and nothing was truncated — but only because the Ollama app on this
+# machine is set to 32k. That setting lives outside the repo; on a stock
+# install below 24 GiB VRAM the default is 4096, and longer prompts would
+# lose their start silently. Same value as agent.py: a different window
+# reloads the model on every switch between the two.
+GEN_OPTIONS = {"temperature": 0, "num_ctx": 32_768}
 
 
 # ────────────────────────── article number parsing ──────────────────────────
@@ -101,19 +136,19 @@ def build_context(chunks):
     return "\n\n".join(parts)
 
 
-def generate(query, chunks, client=None):
+def generate(query, chunks, client=None, system=SYSTEM):
     own = client is None
     client = client or httpx.Client()
     try:
         r = client.post(URL, json={
             "model": MODEL,
             "messages": [
-                {"role": "system", "content": SYSTEM},
+                {"role": "system", "content": system},
                 {"role": "user",
                  "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{query}"},
             ],
             "stream": False, "think": False,
-            "options": {"temperature": 0},
+            "options": GEN_OPTIONS,
         }, timeout=300)
         r.raise_for_status()
         return r.json()["message"]["content"].strip()
@@ -191,8 +226,132 @@ def inspect(answer, chunks):
         # a regression guard, not a quality indicator: 1.0 is expected
         "citation_validity": None if not cited
         else (len(cited) - len(bad_arts)) / len(cited),
+        **check_quotes(body, chunks),
         "len": len(body),
     }
+
+
+# ── verbatim quote check (phase 6) ──
+# Minimum 4 characters: a shorter 「」 is a term the answer brackets for
+# emphasis (「労働者」), not a quote.
+# ANY_QUOTE_RE only cuts quotes out when looking for numbers. Quotes
+# themselves come from _quotes(), which tracks nesting: statute text quotes
+# its own terms, and a long quote in #23 contained 「支給日数」 inside.
+ANY_QUOTE_RE = re.compile(r"「([^「」]{4,})」")
+MIN_QUOTE = 4
+ELLIPSIS_RE = re.compile(r"…+|\.{3,}|・{3,}")
+# A number with a unit. 条/項/号 are deliberately absent: article references
+# legitimately live outside quotes.
+NUM_RE = re.compile(r"[0-9〇一二三四五六七八九十百千]+"
+                    r"(?:日|箇月|か月|ヶ月|カ月|ケ月|時間|年|週|割|円|%|人)")
+
+
+def _norm(s):
+    """Width and whitespace only. Numerals are NOT unified: 六箇月 against
+    6か月 is exactly the kind of drift a verbatim check exists to catch."""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s))
+
+
+def _verbatim(quote, text):
+    """quote occurs in text; fragments split by an ellipsis must occur in order."""
+    pos = 0
+    for frag in ELLIPSIS_RE.split(quote):
+        frag = _norm(frag)
+        if not frag:
+            continue
+        i = text.find(frag, pos)
+        if i < 0:
+            return False
+        pos = i + len(frag)
+    return True
+
+
+def _sentences(body):
+    """Split on 。 and newlines, but never inside 「」."""
+    out, cur, depth = [], [], 0
+    for ch in body:
+        if ch == "「":
+            depth += 1
+        elif ch == "」" and depth:
+            depth -= 1
+        if ch in "。\n" and depth == 0:
+            if "".join(cur).strip():
+                out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    if "".join(cur).strip():
+        out.append("".join(cur))
+    return out
+
+
+def _quotes(s):
+    """Top-level 「…」 spans; nested brackets stay inside their parent."""
+    qs, depth, start = [], 0, 0
+    for i, ch in enumerate(s):
+        if ch == "「":
+            if depth == 0:
+                start = i + 1
+            depth += 1
+        elif ch == "」" and depth:
+            depth -= 1
+            if depth == 0:
+                qs.append(s[start:i])
+    return qs
+
+
+def check_quotes(body, chunks):
+    """A quote must be a substring of a chunk cited IN ITS SENTENCE, as the
+    model saw that chunk.
+
+    First version demanded 「…」[N] back to back and missed 71 of 102
+    quotes: the model writes natural Japanese — 「…」を支払わなければ
+    なりません[1] — quote mid-sentence, marker at the end.
+
+    Checked against the sentence's own [N] chunks, not the whole context:
+    otherwise text of one article quoted under another's number would pass
+    (phase 5, case 5). found_in says where the text really is — non-empty
+    means "real text, wrong number", empty means "not a real quote" (case 4).
+    """
+    texts = [_norm(c["text"].split("\n", 1)[-1]) for c in chunks]
+
+    def where(q):
+        return [i + 1 for i, t in enumerate(texts) if _verbatim(q, t)]
+
+    # Two coverages, because verbatim-ness alone rewards NOT quoting. The
+    # first test answer quoted the undisputed sentence and paraphrased the
+    # exceptions — the phase 5 splice again, outside the quotes — while
+    # reporting "0 non-verbatim". And sentence coverage alone rewards a
+    # token quote: 「妊娠したこと」 in brackets, the claim itself paraphrased.
+    # So: claims_quoted (sentences with a verbatim quote) AND quoted_chars
+    # (share of claim text that is verbatim).
+    bad, loose = [], []
+    n_quotes = claims = claims_quoted = claim_chars = quoted_chars = 0
+    for s in _sentences(body):
+        src = [int(x) for x in MARK_RE.findall(s) if 1 <= int(x) <= len(texts)]
+        ok_chars = 0
+        for q in _quotes(s):
+            if len(_norm(q)) < MIN_QUOTE:
+                continue
+            if not src:
+                loose.append({"quote": q, "found_in": where(q)})
+                continue
+            n_quotes += 1
+            if any(_verbatim(q, texts[n - 1]) for n in src):
+                ok_chars += len(_norm(q))
+            else:
+                bad.append({"quote": q, "n": src, "found_in": where(q)})
+        if src:
+            claims += 1
+            claims_quoted += ok_chars > 0
+            claim_chars += len(_norm(MARK_RE.sub("", s)))
+            quoted_chars += ok_chars
+
+    outside = unicodedata.normalize("NFKC", ANY_QUOTE_RE.sub("", body))
+    return {"quotes": n_quotes, "quote_bad": bad, "quote_loose": loose,
+            "num_unquoted": NUM_RE.findall(outside),
+            "claims": claims, "claims_quoted": claims_quoted,
+            "claim_chars": claim_chars, "quoted_chars": quoted_chars}
 
 
 # ──────────────────────────────────── cli ────────────────────────────────────
@@ -308,13 +467,14 @@ def load_golden():
     return [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
 
 
-def cmd_sample(n=5, mode=DEFAULT_MODE):
+def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):
     """Raw answers, to be read by eye. No numbers here, and there should not be."""
     r = Reranked()
+    system = SYSTEM_QUOTES if quotes else SYSTEM_BASE
     with httpx.Client() as cl:
         for g in load_golden()[:n]:
             ch = retrieve(r, g["q"], mode)
-            ans = generate(g["q"], ch, cl)
+            ans = generate(g["q"], ch, cl, system=system)
             info = inspect(ans, ch)
 
             print("=" * 72)
@@ -341,18 +501,67 @@ def cmd_sample(n=5, mode=DEFAULT_MODE):
                 print("  ⚠ отказ неполный: 回答不可, а ссылки есть")
             if info["hedged"] and info["verdict"] == "ok":
                 print("  ⚠ перестраховка: 回答可能, но в тексте оговорка")
+            print_quotes(info)
             print()
 
 
-def cmd_eval(mode=DEFAULT_MODE):
+def print_quotes(info):
+    if info["claims"]:
+        print(f"  утверждений с [N]: {info['claims']}, с дословной цитатой: "
+              f"{info['claims_quoted']}  ← остальные непроверяемы")
+    if info["quotes"] or info["quote_loose"]:
+        print(f"  цитат с [N]: {info['quotes']}, из них не дословных: "
+              f"{len(info['quote_bad'])}; без [N]: {len(info['quote_loose'])}")
+    for b in info["quote_bad"]:
+        real = (f" → текст на самом деле в [{','.join(map(str, b['found_in']))}]"
+                if b["found_in"] else " → ни в одной статье")
+        print(f"  ❌ [{','.join(map(str, b['n']))}]「{b['quote'][:50]}」{real}")
+    if info["num_unquoted"]:
+        print(f"  ⚠ числа вне цитат: {info['num_unquoted']}")
+
+
+def quote_summary(rows):
+    """Quote metrics over report rows. Shared by --eval and rescore_quotes.py:
+    the metric can change without regenerating a single answer."""
+    answered = [r_ for r_ in rows if r_["verdict"] == "ok"]
+    if not answered:
+        return
+    nq = sum(r_["quotes"] for r_ in answered)
+    bads = [(r_, b) for r_ in answered for b in r_["quote_bad"]]
+    moved = [x for x in bads if x[1]["found_in"]]
+    nc = sum(r_["claims"] for r_ in answered)
+    ncq = sum(r_["claims_quoted"] for r_ in answered)
+    cc = sum(r_["claim_chars"] for r_ in answered)
+    qc = sum(r_["quoted_chars"] for r_ in answered)
+    print(f"\nцитаты: {nq} в {sum(1 for r_ in answered if r_['quotes'])}/{len(answered)} ответах")
+    if nc:
+        # Read coverage BEFORE verbatim-ness: high verbatim-ness with low
+        # coverage means the model quotes only what is easy to quote.
+        print(f"  покрытие утверждений: {ncq}/{nc} = {ncq / nc:.2f}  "
+              f"предложение с [N] и хотя бы одной дословной цитатой")
+        print(f"  покрытие текста:      {qc}/{cc} = {qc / cc:.2f}  "
+              f"доля символов утверждений внутри дословных цитат")
+    if nq:
+        print(f"  дословных:            {nq - len(bads)}/{nq} = {(nq - len(bads)) / nq:.2f}")
+    print(f"  не из своей [N]:      {len(bads)}  (текст есть под другим номером: {len(moved)})")
+    print(f"  цитат в предложениях без [N]: {sum(len(r_['quote_loose']) for r_ in answered)}")
+    print(f"  ответов с числом вне цитат: {sum(1 for r_ in answered if r_['num_unquoted'])}")
+    for r_, b in bads:
+        real = (f" → в [{','.join(map(str, b['found_in']))}]" if b["found_in"]
+                else " → нигде")
+        print(f"  #{r_['id']} [{','.join(map(str, b['n']))}]{real}  「{b['quote'][:40]}」")
+
+
+def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     golden = load_golden()
     r = Reranked()
     rows = []
-    print(f"сборка контекста: {mode}\n")
+    system = SYSTEM_QUOTES if quotes else SYSTEM_BASE
+    print(f"сборка контекста: {mode}{' · промпт с цитатами' if quotes else ''}\n")
     with httpx.Client() as cl:
         for i, g in enumerate(golden, 1):
             ch = retrieve(r, g["q"], mode)
-            ans = generate(g["q"], ch, cl)
+            ans = generate(g["q"], ch, cl, system=system)
             info = inspect(ans, ch)
 
             # Did retrieval hit: is at least one gold article present in the context.
@@ -394,6 +603,8 @@ def cmd_eval(mode=DEFAULT_MODE):
               f"{sum(r_['citation_validity'] for r_ in with_cit) / len(with_cit):.3f}"
               f"  (сторож, ожидается 1.000)")
 
+    quote_summary(rows)
+
     # ─── retrieval versus generation (§4.5) ───
     # The overall refusal rate says nothing: refusing when search missed is
     # correct behaviour, refusing when it hit is a loss. Two error rates,
@@ -419,7 +630,9 @@ def cmd_eval(mode=DEFAULT_MODE):
         if group:
             print(f"  {label}: " + ", ".join(f"#{r_['id']}" for r_ in group))
 
-    out = report_path(mode)
+    # A separate report: the quote prompt changes generation, and the baseline
+    # gen_report_whole.json must stay — the ablation is paired against it.
+    out = report_path(mode, "_quotes" if quotes else "")
     out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"→ {out}")
 
@@ -451,7 +664,7 @@ def cmd_ablate(mode=DEFAULT_MODE):
         for i, g in enumerate(targets, 1):
             gold = {tuple(x) for x in g["relevant"]}
             ch = retrieve(r, g["q"], mode, exclude=gold)
-            ans = generate(g["q"], ch, cl)
+            ans = generate(g["q"], ch, cl, system=SYSTEM_BASE)  # paired with the base-prompt report
             info = inspect(ans, ch)
 
             # Sanity check: the gold article is definitely absent from the context.
@@ -497,22 +710,27 @@ def main():
     mode = ("raw" if "--nodedupe" in args else
             "dedupe" if "--dedupe" in args else
             "whole" if "--whole" in args else DEFAULT_MODE)
+    # The quote prompt is the default; --base is the phase 4 prompt.
+    quotes = "--base" not in args
     if "--ablate" in args:
         return cmd_ablate(mode)
     if "--sample" in args:
-        return cmd_sample(mode=mode)
+        return cmd_sample(mode=mode, quotes=quotes)
     if "--eval" in args:
-        return cmd_eval(mode=mode)
+        return cmd_eval(mode=mode, quotes=quotes)
 
     query = " ".join(a for a in args if not a.startswith("--")) or \
         "有給って入社してすぐもらえるの？"
     r = Reranked()
     ch = retrieve(r, query, mode)
-    print(f"\n{generate(query, ch)}\n")
+    ans = generate(query, ch, system=SYSTEM_QUOTES if quotes else SYSTEM_BASE)
+    print(f"\n{ans}\n")
     print("— источники —")
     for i, c in enumerate(ch, 1):
         print(f"[{i}] {c['law_title'][:24]} {c['article_title']}"
               f"{c['article_caption'] or ''}")
+    print("— цитаты —")
+    print_quotes(inspect(ans, ch))
 
 
 if __name__ == "__main__":
