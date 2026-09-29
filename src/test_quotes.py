@@ -80,6 +80,30 @@ def run():
     r.append(check("склейка вне кавычек: дословно 1/1, покрытие 1/3",
                    (q["quotes"] - len(q["quote_bad"]), q["claims_quoted"], q["claims"]),
                    (1, 1, 3)))
+
+    # Case 1 of phase 5: 時季変更権 put under 第3項 — it is in 第5項. A shortened
+    # stand-in for 第39条 with paragraph labels, as whole_article() builds it.
+    a39 = {"text": "労働基準法 第三十九条\n"
+                   "（第3項）次に掲げる労働者の有給休暇の日数については、比例して付与する。\n"
+                   "（第5項）使用者は、前各項の規定による有給休暇を労働者の請求する時季に"
+                   "与えなければならない。",
+           "paragraphs": {
+               3: "次に掲げる労働者の有給休暇の日数については、比例して付与する。",
+               5: "使用者は、前各項の規定による有給休暇を労働者の請求する時季に"
+                  "与えなければならない。"}}
+    quote39 = "「前各項の規定による有給休暇を労働者の請求する時季に与えなければならない」[1] "
+
+    q = check_quotes(quote39 + "労働基準法 第三十九条第3項", [a39])
+    r.append(check("случай 1: указан 第3項, цитата в 第5項",
+                   [(b["cited"], b["found"]) for b in q["para_bad"]], [([3], [5])]))
+
+    q = check_quotes(quote39 + "労働基準法 第三十九条第五項", [a39])
+    r.append(check("верный 第五項 (кандзи) — без ошибки",
+                   (q["para_claims"], q["para_bad"]), (1, [])))
+
+    # 第N項 inside a quote is the statute's own wording, not the answer's source.
+    q = check_quotes("「第三項の規定による」[1] 労働基準法 第三十九条", [a39])
+    r.append(check("第N項 внутри цитаты не считается ссылкой", q["para_claims"], 0))
     return r
 
 

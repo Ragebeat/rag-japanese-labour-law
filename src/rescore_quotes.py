@@ -28,13 +28,19 @@ def rebuild(context, arts):
     chunks = []
     for ref in context:
         law_id, art = ref.split(" ", 1)
-        seen, bodies = set(), []
+        seen, bodies, paras = set(), [], {}
         for p in arts.get((law_id, art), []):
             body = p["text"].split("\n", 1)[-1]
             if body not in seen:
                 seen.add(body)
                 bodies.append(body)
-        chunks.append({"text": f"{ref}\n" + "\n".join(bodies)})
+                pn = p.get("paragraph_num")
+                if pn and str(pn).isdigit():
+                    paras.setdefault(int(pn), []).append(body)
+        c = {"text": f"{ref}\n" + "\n".join(bodies)}
+        if len(paras) > 1:
+            c["paragraphs"] = {k: "\n".join(v) for k, v in paras.items()}
+        chunks.append(c)
     return chunks
 
 

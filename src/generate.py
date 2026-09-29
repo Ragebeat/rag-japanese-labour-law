@@ -28,7 +28,7 @@ import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rerank import Reranked  # noqa: E402
-from jnum import art_key, fmt as _fmt  # noqa: E402
+from jnum import NUM, art_key, fmt as _fmt, num  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -88,7 +88,9 @@ SYSTEM_QUOTES = SYSTEM_BASE + """
    直後にその条文の番号を付ける。形式:「引用文」[N]
    「」の中は言い換えない・要約しない・別々の文をつなぎ合わせない。
    別の文を引用するときは、別の「」にする
-7. 数字・日数・期間は「」の引用の中にだけ書く"""
+7. 数字・日数・期間は「」の引用の中にだけ書く
+8. 条文に（第N項）の印がある場合、根拠の項まで書く。形式:「[N] ◯◯法 第N条第N項」
+   項の番号は必ず（第N項）の印から取る。段落を数えて推測しない"""
 
 # The default since phase 6 (29.09), measured on golden against the base
 # prompt: claim coverage 0.09 -> 0.68, answers with numbers outside quotes
@@ -131,6 +133,11 @@ def build_context(chunks):
     parts = []
     for i, c in enumerate(chunks, 1):
         head = f"{c['law_title']} {c['article_title']}{c['article_caption'] or ''}"
+        # A single paragraph (an article over ARTICLE_CAP, or dedupe/raw mode):
+        # its number lives only in the stripped chunk header, so it goes into
+        # the head. Assembled articles carry per-paragraph labels in the body.
+        if "paragraphs" not in c and c.get("paragraph_num"):
+            head += f" 第{c['paragraph_num']}項"
         body = c["text"].split("\n", 1)[-1]
         parts.append(f"[{i}] {head}\n{body}")
     return "\n\n".join(parts)
@@ -244,6 +251,23 @@ ELLIPSIS_RE = re.compile(r"…+|\.{3,}|・{3,}")
 # legitimately live outside quotes.
 NUM_RE = re.compile(r"[0-9〇一二三四五六七八九十百千]+"
                     r"(?:日|箇月|か月|ヶ月|カ月|ケ月|時間|年|週|割|円|%|人)")
+# A paragraph reference in the answer: 第五項 / 第5項 / 第５項.
+PARA_RE = re.compile(rf"第({NUM})項")
+
+
+def _outside(s):
+    """The sentence with top-level 「…」 removed: a 第N項 inside a quote is
+    the statute talking about itself (「第三項において同じ」), not the answer
+    naming its source."""
+    out, depth = [], 0
+    for ch in s:
+        if ch == "「":
+            depth += 1
+        elif ch == "」" and depth:
+            depth -= 1
+        elif depth == 0:
+            out.append(ch)
+    return "".join(out)
 
 
 def _norm(s):
@@ -315,6 +339,17 @@ def check_quotes(body, chunks):
     """
     texts = [_norm(c["text"].split("\n", 1)[-1]) for c in chunks]
 
+    # Paragraph maps, where the paragraph structure is known: an assembled
+    # article carries "paragraphs"; a single-paragraph chunk its own number.
+    pmaps = []
+    for c, t in zip(chunks, texts):
+        if c.get("paragraphs"):
+            pmaps.append({k: _norm(v) for k, v in c["paragraphs"].items()})
+        elif c.get("paragraph_num") and str(c["paragraph_num"]).isdigit():
+            pmaps.append({int(c["paragraph_num"]): t})
+        else:
+            pmaps.append(None)
+
     def where(q):
         return [i + 1 for i, t in enumerate(texts) if _verbatim(q, t)]
 
@@ -325,10 +360,19 @@ def check_quotes(body, chunks):
     # token quote: 「妊娠したこと」 in brackets, the claim itself paraphrased.
     # So: claims_quoted (sentences with a verbatim quote) AND quoted_chars
     # (share of claim text that is verbatim).
-    bad, loose = [], []
+    bad, loose, para_bad = [], [], []
     n_quotes = claims = claims_quoted = claim_chars = quoted_chars = 0
+    para_claims = 0
     for s in _sentences(body):
         src = [int(x) for x in MARK_RE.findall(s) if 1 <= int(x) <= len(texts)]
+        # The paragraph the sentence names. Checkable only when the sentence
+        # cites exactly one article and that article has a paragraph map —
+        # with two articles cited, 第N項 could belong to either.
+        one = src[0] if len(set(src)) == 1 else None
+        pm = pmaps[one - 1] if one else None
+        refs = ({num(x) for x in PARA_RE.findall(_outside(s))} - {None}) if pm else set()
+        if refs:
+            para_claims += 1
         ok_chars = 0
         for q in _quotes(s):
             if len(_norm(q)) < MIN_QUOTE:
@@ -339,6 +383,13 @@ def check_quotes(body, chunks):
             n_quotes += 1
             if any(_verbatim(q, texts[n - 1]) for n in src):
                 ok_chars += len(_norm(q))
+                if refs:
+                    # A quote spanning two paragraphs sits in none of them
+                    # alone — then there is nothing to compare, not an error.
+                    inside = [k for k, t in pm.items() if _verbatim(q, t)]
+                    if inside and not set(inside) & refs:
+                        para_bad.append({"quote": q, "n": one,
+                                         "cited": sorted(refs), "found": inside})
             else:
                 bad.append({"quote": q, "n": src, "found_in": where(q)})
         if src:
@@ -351,7 +402,8 @@ def check_quotes(body, chunks):
     return {"quotes": n_quotes, "quote_bad": bad, "quote_loose": loose,
             "num_unquoted": NUM_RE.findall(outside),
             "claims": claims, "claims_quoted": claims_quoted,
-            "claim_chars": claim_chars, "quoted_chars": quoted_chars}
+            "claim_chars": claim_chars, "quoted_chars": quoted_chars,
+            "para_claims": para_claims, "para_bad": para_bad}
 
 
 # ──────────────────────────────────── cli ────────────────────────────────────
@@ -421,17 +473,31 @@ def whole_article(c, arts):
     total = sum(p["n_chars"] for p in parts)
     if len(parts) == 1 or total > ARTICLE_CAP:
         return c
-    seen, bodies = set(), []
+    # Paragraph labels (phase 6). The chunk header carries 「第N項」, but
+    # only the body went into the context: the model never saw paragraph
+    # numbers and had to count paragraphs itself (phase 5: 時季変更権 put
+    # under 第3項 — it is 第5項). Labels also give check_quotes a map to
+    # verify that a quote sits in the paragraph the answer names.
+    labelled = len({p.get("paragraph_num") for p in parts}) > 1
+    seen, bodies, paras, prev = set(), [], {}, None
     for p in parts:
         body = p["text"].split("\n", 1)[-1]
         if body in seen:
             continue
         seen.add(body)
+        pn = p.get("paragraph_num")
+        if pn and str(pn).isdigit():
+            paras.setdefault(int(pn), []).append(body)
+        if labelled and pn and pn != prev:
+            body = f"（第{pn}項）{body}"
+        prev = pn
         bodies.append(body)
     out = dict(c)
     out["text"] = c["text"].split("\n", 1)[0] + "\n" + "\n".join(bodies)
     out["n_chars"] = total
     out["n_paragraphs"] = len(bodies)
+    if labelled:
+        out["paragraphs"] = {k: "\n".join(v) for k, v in paras.items()}
     return out
 
 
@@ -518,6 +584,9 @@ def print_quotes(info):
         print(f"  ❌ [{','.join(map(str, b['n']))}]「{b['quote'][:50]}」{real}")
     if info["num_unquoted"]:
         print(f"  ⚠ числа вне цитат: {info['num_unquoted']}")
+    for b in info.get("para_bad", []):
+        print(f"  ❌ [{b['n']}] указан 第{','.join(map(str, b['cited']))}項, "
+              f"а цитата в 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
 
 
 def quote_summary(rows):
@@ -546,6 +615,13 @@ def quote_summary(rows):
     print(f"  не из своей [N]:      {len(bads)}  (текст есть под другим номером: {len(moved)})")
     print(f"  цитат в предложениях без [N]: {sum(len(r_['quote_loose']) for r_ in answered)}")
     print(f"  ответов с числом вне цитат: {sum(1 for r_ in answered if r_['num_unquoted'])}")
+    # ── paragraphs: does the quote sit in the 項 the answer names ──
+    npc = sum(r_.get("para_claims", 0) for r_ in answered)
+    pbad = [(r_, b) for r_ in answered for b in r_.get("para_bad", [])]
+    print(f"  утверждений с указанным 項: {npc}; цитата не в указанном 項: {len(pbad)}")
+    for r_, b in pbad:
+        print(f"  #{r_['id']} [{b['n']}] указан 第{','.join(map(str, b['cited']))}項 "
+              f"→ в 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
     for r_, b in bads:
         real = (f" → в [{','.join(map(str, b['found_in']))}]" if b["found_in"]
                 else " → нигде")
