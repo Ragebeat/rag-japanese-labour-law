@@ -38,7 +38,10 @@ def rebuild(context, arts):
                 if pn and str(pn).isdigit():
                     paras.setdefault(int(pn), []).append(body)
         c = {"text": f"{ref}\n" + "\n".join(bodies)}
-        if len(paras) > 1:
+        # A map even for a one-paragraph article: at generation time such a
+        # chunk carries its paragraph_num, so check_quotes counts its 第1項
+        # claims. Without it the rescore undercounted (91 vs 119).
+        if paras:
             c["paragraphs"] = {k: "\n".join(v) for k, v in paras.items()}
         chunks.append(c)
     return chunks
