@@ -67,6 +67,7 @@ from agent import (FINAL_BASE, FINAL_DEFAULT, FINAL_HEAD, LLM_TIMEOUT,  # noqa: 
                    MODEL, NUDGE, REFRAME, STALL_MAX, SYSTEM, THRESHOLD,
                    TOOL_NAME, URL, Budget, Progress, Tool, _error, chat,
                    fallback)
+import tracing  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MEMORY_FILE = ROOT / "data" / "user_memory.json"   # in .gitignore: personal data
@@ -476,6 +477,15 @@ def show(values):
 
 
 def run_turn(graph, thread, q, store):
+    """One turn = one trace. The span also covers a human-in-the-loop pause:
+    the trace's wall time then includes waiting for a person, while the
+    model and tool spans inside show only their own time."""
+    with tracing.span("agent_graph.turn", "AGENT", input=q,
+                      attrs={"session.id": thread}):
+        _run_turn(graph, thread, q, store)
+
+
+def _run_turn(graph, thread, q, store):
     config = {"configurable": {"thread_id": thread}}
     prev = graph.get_state(config).values.get("messages") or []
     # The system prompt is replaced every turn: it carries the CURRENT
@@ -518,6 +528,7 @@ def main():
     first = " ".join(a for a in args if not a.startswith("--"))
 
     print(f"порог (5-й перцентиль, score_gate.json): {THRESHOLD:.3f}")
+    tracing.setup()
     tool = Tool()
     store = load_store()
     prof = profile(store)

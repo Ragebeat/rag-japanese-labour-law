@@ -37,7 +37,21 @@ CONFIGS = [
     ("+rerank pool40", dict(**BEST, rerank=True, rerank_on="original",
                             pool=40),
      "40 кандидатов вместо 20"),
+    # Phase 6: the trace showed the reranker takes ~88% of retrieval (about
+    # 0.4-0.6 s per pair on the CPU). Phase 4 only tried a LARGER pool; the
+    # cheap lever is a smaller one — if recall holds.
+    ("+rerank exp pool15", dict(**BEST, rerank=True, rerank_on="expanded",
+                                pool=15),
+     "15 кандидатов — реранк на четверть дешевле"),
+    ("+rerank exp pool10", dict(**BEST, rerank=True, rerank_on="expanded",
+                                pool=10),
+     "10 кандидатов — реранк вдвое дешевле"),
 ]
+
+# --pool runs only the working configuration against its smaller pools, and
+# writes its own report: sweep.json is phase 4's record.
+POOL_SET = ("+rerank exp", "+rerank exp pool15", "+rerank exp pool10")
+OUT_POOL = ROOT / "data" / "sweep_pool.json"
 
 
 def first_hit(results, relevant):
@@ -71,6 +85,9 @@ def run(h, rr, golden, kw):
 
 
 def main():
+    only_pool = "--pool" in sys.argv
+    configs = [c for c in CONFIGS if c[0] in POOL_SET] if only_pool else CONFIGS
+    out = OUT_POOL if only_pool else OUT
     golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
     h = Hybrid()
     rr = Reranked(h)
@@ -80,7 +97,7 @@ def main():
     print("-" * 74)
 
     report = {}
-    for name, kw, note in CONFIGS:
+    for name, kw, note in configs:
         m, rows = run(h, rr, golden, kw)
         report[name] = {"params": {k: str(v) for k, v in kw.items()},
                         "note": note, "metrics": m, "rows": rows}
@@ -103,7 +120,9 @@ def main():
 
     for pair in (("словарь+LLM", "+rerank orig"),
                  ("+rerank orig", "+rerank exp"),
-                 ("+rerank orig", "+rerank pool40")):
+                 ("+rerank orig", "+rerank pool40"),
+                 ("+rerank exp", "+rerank exp pool15"),
+                 ("+rerank exp", "+rerank exp pool10")):
         if pair[0] not in report or pair[1] not in report:
             continue
         a = {r["id"]: r["pos"] for r in report[pair[0]]["rows"]}
@@ -117,9 +136,9 @@ def main():
         for i in broke:
             print(f"   − #{i:>2} {qs[i][:34]:<36} {a[i]} → {b[i]}")
 
-    OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2),
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=2),
                    encoding="utf-8")
-    print(f"→ {OUT}")
+    print(f"→ {out}")
 
 
 if __name__ == "__main__":

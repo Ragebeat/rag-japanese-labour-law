@@ -36,6 +36,7 @@ import httpx
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rerank import Reranked  # noqa: E402
 from jnum import NUM, art_key, fmt as _fmt, num  # noqa: E402
+import tracing  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -258,16 +259,20 @@ def generate(query, chunks, client=None, system=SYSTEM):
     own = client is None
     client = client or httpx.Client()
     try:
-        r = client.post(URL, json={
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user",
-                 "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{query}"},
-            ],
-            "stream": False, "think": False,
-            "options": GEN_OPTIONS,
-        }, timeout=300)
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user",
+             "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{query}"},
+        ]
+        with tracing.span("generate", "LLM") as sp:
+            tracing.llm_request(sp, MODEL, messages, GEN_OPTIONS)
+            r = client.post(URL, json={
+                "model": MODEL, "messages": messages,
+                "stream": False, "think": False,
+                "options": GEN_OPTIONS,
+            }, timeout=300)
+            if r.is_success:
+                tracing.llm_response(sp, r.json())
         r.raise_for_status()
         return r.json()["message"]["content"].strip()
     finally:
@@ -779,9 +784,16 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     print(f"сборка контекста: {mode}{' · промпт с цитатами' if quotes else ''}\n")
     with httpx.Client() as cl:
         for i, g in enumerate(golden, 1):
-            ch = retrieve(r, g["q"], mode)
-            ans = generate(g["q"], ch, cl, system=system)
-            info = inspect(ans, ch)
+            # One trace per golden question: retrieval and generation nest
+            # under it, so a slow or odd answer can be opened by its id.
+            with tracing.span("rag.answer", "CHAIN", input=g["q"],
+                              attrs={"golden.id": g["id"]}) as sp:
+                with tracing.span("retrieve", "RETRIEVER", input=g["q"]) as rs:
+                    ch = retrieve(r, g["q"], mode)
+                    tracing.documents(rs, ch)
+                ans = generate(g["q"], ch, cl, system=system)
+                info = inspect(ans, ch)
+                tracing.set_attrs(sp, {"output.value": ans, "rag.verdict": info["verdict"]})
 
             # Did retrieval hit: is at least one gold article present in the context.
             # This separates two different questions that a single number conflates:
@@ -931,6 +943,7 @@ def main():
             "dedupe" if "--dedupe" in args else
             "whole" if "--whole" in args else DEFAULT_MODE)
     # The quote prompt is the default; --base is the phase 4 prompt.
+    tracing.setup()
     quotes = "--base" not in args
     if "--ablate" in args:
         return cmd_ablate(mode)
@@ -942,8 +955,12 @@ def main():
     query = " ".join(a for a in args if not a.startswith("--")) or \
         "有給って入社してすぐもらえるの？"
     r = Reranked()
-    ch = retrieve(r, query, mode)
-    ans = generate(query, ch, system=SYSTEM_QUOTES if quotes else SYSTEM_BASE)
+    with tracing.span("rag.answer", "CHAIN", input=query) as sp:
+        with tracing.span("retrieve", "RETRIEVER", input=query) as rs:
+            ch = retrieve(r, query, mode)
+            tracing.documents(rs, ch)
+        ans = generate(query, ch, system=SYSTEM_QUOTES if quotes else SYSTEM_BASE)
+        tracing.set_attrs(sp, {"output.value": ans})
     print(f"\n{ans}\n")
     print("— источники —")
     for i, c in enumerate(ch, 1):

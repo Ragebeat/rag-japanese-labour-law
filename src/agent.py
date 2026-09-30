@@ -31,6 +31,7 @@ from generate import (KW, MODEL, POOL_MULT, URL, _by_article,  # noqa: E402
 from query_expand import expand  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
 from rerank import Reranked  # noqa: E402
+import tracing  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = ROOT / "data" / "score_gate.json"
@@ -162,8 +163,12 @@ class Tool:
         # Same assembly as generate.retrieve in `whole` mode, plus core_only,
         # which retrieve hard-codes to True.
         pool = k * POOL_MULT
-        cands = self.rr.search(query, k=pool, core_only=core_only, pool=pool, **KW)
-        return [whole_article(c, self.arts) for c in dedupe_by_article(cands, k)]
+        with tracing.span("retrieve", "RETRIEVER", input=query,
+                          attrs={"retrieval.core_only": core_only, "retrieval.k": k}) as sp:
+            cands = self.rr.search(query, k=pool, core_only=core_only, pool=pool, **KW)
+            out = [whole_article(c, self.arts) for c in dedupe_by_article(cands, k)]
+            tracing.documents(sp, out)
+            return out
 
     def _run(self, query, k):
         hits = self._search(query, k, core_only=True)
@@ -183,7 +188,10 @@ class Tool:
                 "A previous search is still running (an earlier call timed "
                 "out and has not finished). Try again in a minute.")},
                     set(), None, None)
-        fut = self.pool.submit(self._run, query, k)
+        # carry(): the search runs in a worker thread, and the trace context
+        # does not follow it there by itself — without this every search
+        # would be a separate orphan trace instead of a child of this call.
+        fut = self.pool.submit(tracing.carry(self._run), query, k)
         self._busy = fut
         try:
             hits, widened = fut.result(timeout=TOOL_TIMEOUT)
@@ -228,6 +236,13 @@ class Tool:
         }, keys, top, exp
 
     def __call__(self, queries, k=5):
+        with tracing.span("labor_laws_rag", "TOOL", input=queries,
+                          attrs={"tool.name": TOOL_NAME, "retrieval.k": k}) as sp:
+            payload, keys, tops, exps = self._call(queries, k)
+            tracing.set_attrs(sp, {"output.value": [r.get("status") for r in payload["results"]]})
+            return payload, keys, tops, exps
+
+    def _call(self, queries, k=5):
         """-> ({"results": [...]}, union of keys, tops, expansions — the last
         two aligned with results; neither is shown to the model)."""
         try:
@@ -244,7 +259,13 @@ class Tool:
 
         results, keys, tops, exps = [], set(), [], []
         for q in queries:
-            r, kk, t, e = self._one(q, k)
+            with tracing.span("sub_query", "CHAIN", input=q) as sp:
+                r, kk, t, e = self._one(q, k)
+                tracing.set_attrs(sp, {
+                    "output.value": r["status"], "rag.status": r["status"],
+                    "rag.top": t, "rag.widened": r.get("widened"),
+                    "rag.expansion.source": e[0] if e else None,
+                    "rag.expansion.terms": list(e[1]) if e else None})
             results.append(r)
             keys |= kk
             tops.append(t)
@@ -377,9 +398,13 @@ def chat(http, messages, tools=True):
                         "num_ctx": NUM_CTX}}
     if tools:
         body["tools"] = [TOOL]
-    r = http.post(URL, json=body, timeout=LLM_TIMEOUT)
-    r.raise_for_status()
-    return r.json()
+    with tracing.span("ollama.chat", "LLM") as sp:
+        tracing.llm_request(sp, MODEL, messages, body["options"], body.get("tools"))
+        r = http.post(URL, json=body, timeout=LLM_TIMEOUT)
+        r.raise_for_status()
+        resp = r.json()
+        tracing.llm_response(sp, resp)
+        return resp
 
 
 def fallback(reason, found):
@@ -392,6 +417,18 @@ def fallback(reason, found):
 # ──────────────────────────────── the loop ───────────────────────────────────
 
 def run(question, tool, trace=False):
+    """One question = one trace: the AGENT span is the root, every model
+    call and tool call nests under it."""
+    with tracing.span("agent", "AGENT", input=question) as sp:
+        res = _run(question, tool, trace)
+        tracing.set_attrs(sp, {
+            "output.value": res["answer"], "agent.stop": res["stop"],
+            "agent.iterations": res["iterations"], "agent.tokens": res["tokens"],
+            "agent.found": [f"{law} {art}" for law, art in res["found"]]})
+        return res
+
+
+def _run(question, tool, trace=False):
     budget, prog = Budget(), Progress()
     msgs = [{"role": "system", "content": SYSTEM},
             {"role": "user", "content": question}]
@@ -517,6 +554,7 @@ def main():
         "育休中に残業させられる？"
 
     print(f"порог (5-й перцентиль, score_gate.json): {THRESHOLD:.3f}")
+    tracing.setup()
     tool = Tool()
     print(f"вопрос: {q}\n")
     res = run(q, tool, trace=trace)

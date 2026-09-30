@@ -30,6 +30,7 @@ import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from query_expand import expand  # noqa: E402
+import tracing  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "llm_expand_cache.json"
@@ -128,12 +129,18 @@ def llm_terms(query, client=None):
     cache = _load_cache()
     k = _key(query)
     if k in cache:
+        # A span even for a cache hit: a trace must show whether the model was
+        # called at all — "13 s on expansion" and "0 ms, cached" look the same
+        # from outside.
+        with tracing.span("expand.llm", "LLM", input=query,
+                          attrs={"expand.cache_hit": True, "llm.model_name": MODEL}) as sp:
+            tracing.set_attrs(sp, {"output.value": cache[k]})
         return cache[k]
 
     own = client is None
     client = client or httpx.Client()
     try:
-        r = client.post(URL, json={
+        body = {
             "model": MODEL,
             "messages": [
                 {"role": "system", "content": SYSTEM},
@@ -142,10 +149,20 @@ def llm_terms(query, client=None):
             "format": SCHEMA,
             "stream": False,
             "think": False,
+            # ⚠️ No num_ctx here, unlike GEN_OPTIONS — a fourth copy of the
+            # options. Harmless while the Ollama app window equals 32768; if not,
+            # the model reloads between expansion and generation. ollama.load_ms
+            # on the next span says which.
             "options": {"temperature": 0},
-        }, timeout=300)
-        r.raise_for_status()
-        raw = r.json()["message"]["content"]
+        }
+        with tracing.span("expand.llm", "LLM", input=query,
+                          attrs={"expand.cache_hit": False}) as sp:
+            tracing.llm_request(sp, MODEL, body["messages"], body["options"])
+            r = client.post(URL, json=body, timeout=300)
+            r.raise_for_status()
+            resp = r.json()
+            tracing.llm_response(sp, resp)
+        raw = resp["message"]["content"]
         terms = json.loads(raw).get("terms", [])
         # post-filter: drop terms containing digits and overly long ones —
         # the model ignores the instruction in roughly a third of cases

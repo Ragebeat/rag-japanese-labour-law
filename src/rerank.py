@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from hybrid import Hybrid  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
+import tracing  # noqa: E402
 
 MODEL = "BAAI/bge-reranker-v2-m3"
 POOL = 20          # how many candidates to hand to the reranker
@@ -57,7 +58,12 @@ class Reranked:
         better on the original question, with the added terms acting as noise.
         But that is a hypothesis — we measure both.
         """
-        cands = self.h.search(query, k=pool, core_only=core_only, **kw)
+        # Two spans split retrieval in two: candidates (query expansion,
+        # embedding via Ollama, Postgres) and the cross-encoder on the CPU.
+        with tracing.span("candidates", "RETRIEVER", input=query,
+                          attrs={"retrieval.pool": pool, "retrieval.core_only": core_only}) as sp:
+            cands = self.h.search(query, k=pool, core_only=core_only, **kw)
+            tracing.set_attrs(sp, {"retrieval.found": len(cands)})
         if not cands:
             return []
 
@@ -67,7 +73,11 @@ class Reranked:
             rq = query
 
         pairs = [(rq, c["text"]) for c in cands]
-        scores = _get().predict(pairs, show_progress_bar=False)
+        with tracing.span("rerank", "RERANKER", input=rq, attrs={
+                "reranker.model_name": MODEL, "reranker.query": rq,
+                "reranker.pairs": len(pairs),
+                "reranker.input_chars": sum(len(t) for _, t in pairs)}):
+            scores = _get().predict(pairs, show_progress_bar=False)
 
         for c, s, old in zip(cands, scores, range(1, len(cands) + 1)):
             c["rerank_score"] = float(s)
