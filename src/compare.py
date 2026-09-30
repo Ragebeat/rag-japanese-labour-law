@@ -33,7 +33,7 @@ from rescore_quotes import rebuild  # noqa: E402
 # Which way is better, per metric. None: informational only.
 BETTER = {
     "recall": +1, "refusal_at_miss": +1, "citation_validity": +1,
-    "claim_coverage": +1, "text_coverage": +1, "para_claims": +1,
+    "claim_coverage": +1, "text_coverage": +1, "verbatim_coverage": +1, "para_claims": +1,
     "over_refusal": -1, "no_verdict": -1, "bad_refs": -1, "quote_bad": -1,
     "para_bad": -1, "num_unquoted_answers": -1, "quotes": None, "n": None,
 }

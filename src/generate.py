@@ -20,6 +20,7 @@ fingerprint; src/compare.py diffs any two runs.
 """
 
 import collections
+import difflib
 import hashlib
 import json
 import os
@@ -195,6 +196,7 @@ def run_metrics(rows):
         "citation_validity": ratio(sum(cv), len(cv)),
         "claim_coverage": ratio(s("claims_quoted"), s("claims")) if has_q else None,
         "text_coverage": ratio(s("quoted_chars"), s("claim_chars")) if has_q else None,
+        "verbatim_coverage": ratio(s("verbatim_chars"), s("content_chars")) if has_q else None,
         "quotes": s("quotes") if has_q else None,
         "quote_bad": sum(len(r.get("quote_bad", [])) for r in ans) if has_q else None,
         "para_claims": s("para_claims") if has_q else None,
@@ -355,6 +357,9 @@ def inspect(answer, chunks):
 # its own terms, and a long quote in #23 contained 「支給日数」 inside.
 ANY_QUOTE_RE = re.compile(r"「([^「」]{4,})」")
 MIN_QUOTE = 4
+# Bracket-free verbatim coverage: a run of 10+ identical characters between
+# the claim and its cited article is copying, not chance.
+MIN_RUN = 10
 ELLIPSIS_RE = re.compile(r"…+|\.{3,}|・{3,}")
 # A number with a unit. 条/項/号 are deliberately absent: article references
 # legitimately live outside quotes.
@@ -433,6 +438,24 @@ def _quotes(s):
     return qs
 
 
+def _covered(content, sources):
+    """How many characters of content lie in runs of MIN_RUN+ characters
+    copied verbatim from any of the sources — brackets or not.
+
+    Why: after the paragraph rule the model kept copying statute text word
+    for word but dropped the 「」 (#42, #50: whole article sentences, even the
+    old kana 代つて). Bracket-based coverage called that paraphrase. The
+    question is whether the claim rests on the source text, not how it is
+    typeset."""
+    hit = [False] * len(content)
+    for t in sources:
+        sm = difflib.SequenceMatcher(None, content, t, autojunk=False)
+        for b in sm.get_matching_blocks():
+            if b.size >= MIN_RUN:
+                hit[b.a:b.a + b.size] = [True] * b.size
+    return sum(hit)
+
+
 def check_quotes(body, chunks):
     """A quote must be a substring of a chunk cited IN ITS SENTENCE, as the
     model saw that chunk.
@@ -471,7 +494,7 @@ def check_quotes(body, chunks):
     # (share of claim text that is verbatim).
     bad, loose, para_bad = [], [], []
     n_quotes = claims = claims_quoted = claim_chars = quoted_chars = 0
-    para_claims = 0
+    para_claims = verbatim_chars = content_chars = 0
     for s in _sentences(body):
         src = [int(x) for x in MARK_RE.findall(s) if 1 <= int(x) <= len(texts)]
         # The paragraph the sentence names. Checkable only when the sentence
@@ -506,13 +529,19 @@ def check_quotes(body, chunks):
             claims_quoted += ok_chars > 0
             claim_chars += len(_norm(MARK_RE.sub("", s)))
             quoted_chars += ok_chars
+            # The claim is the text BEFORE its first [N]; what follows is the
+            # reference itself (law name, article, caption), not content.
+            content = _norm(MARK_RE.split(s)[0])
+            content_chars += len(content)
+            verbatim_chars += _covered(content, [texts[n - 1] for n in set(src)])
 
     outside = unicodedata.normalize("NFKC", ANY_QUOTE_RE.sub("", body))
     return {"quotes": n_quotes, "quote_bad": bad, "quote_loose": loose,
             "num_unquoted": NUM_RE.findall(outside),
             "claims": claims, "claims_quoted": claims_quoted,
             "claim_chars": claim_chars, "quoted_chars": quoted_chars,
-            "para_claims": para_claims, "para_bad": para_bad}
+            "para_claims": para_claims, "para_bad": para_bad,
+            "verbatim_chars": verbatim_chars, "content_chars": content_chars}
 
 
 # ──────────────────────────────────── cli ────────────────────────────────────
@@ -719,6 +748,11 @@ def quote_summary(rows):
               f"предложение с [N] и хотя бы одной дословной цитатой")
         print(f"  покрытие текста:      {qc}/{cc} = {qc / cc:.2f}  "
               f"доля символов утверждений внутри дословных цитат")
+        vc = sum(r_.get("verbatim_chars", 0) for r_ in answered)
+        tc = sum(r_.get("content_chars", 0) for r_ in answered)
+        if tc:
+            print(f"  дословно из источника: {vc}/{tc} = {vc / tc:.2f}  "
+                  f"текст утверждений, совпадающий с статьёй кусками от {MIN_RUN} символов, с кавычками или без")
     if nq:
         print(f"  дословных:            {nq - len(bads)}/{nq} = {(nq - len(bads)) / nq:.2f}")
     print(f"  не из своей [N]:      {len(bads)}  (текст есть под другим номером: {len(moved)})")
