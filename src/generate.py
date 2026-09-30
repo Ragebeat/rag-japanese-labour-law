@@ -194,6 +194,7 @@ def run_metrics(rows):
         "refusal_at_miss": ratio(sum(1 for r in miss if r["verdict"] == "no"), len(miss)),
         "no_verdict": sum(1 for r in rows if r["verdict"] not in ("ok", "no")),
         "bad_refs": sum(len(r.get("bad_arts", [])) for r in rows),
+        "blocked_links": sum(len(r.get("blocked_links", [])) for r in rows),
         "citation_validity": ratio(sum(cv), len(cv)),
         "claim_coverage": ratio(s("claims_quoted"), s("claims")) if has_q else None,
         "text_coverage": ratio(s("quoted_chars"), s("claim_chars")) if has_q else None,
@@ -255,14 +256,16 @@ def build_context(chunks):
     return "\n\n".join(parts)
 
 
-def generate(query, chunks, client=None, system=SYSTEM):
+def generate(query, chunks, client=None, system=SYSTEM, builder=None):
+    # builder: an alternative context format (phase 6 injection test wraps
+    # documents in <document> tags). Default: build_context.
     own = client is None
     client = client or httpx.Client()
     try:
         messages = [
             {"role": "system", "content": system},
             {"role": "user",
-             "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{query}"},
+             "content": f"【条文】\n{(builder or build_context)(chunks)}\n\n【質問】\n{query}"},
         ]
         with tracing.span("generate", "LLM") as sp:
             tracing.llm_request(sp, MODEL, messages, GEN_OPTIONS)
@@ -350,6 +353,7 @@ def inspect(answer, chunks):
         "citation_validity": None if not cited
         else (len(cited) - len(bad_arts)) / len(cited),
         **check_quotes(body, chunks),
+        "blocked_links": guard_links(body)[1],
         "len": len(body),
     }
 
@@ -714,6 +718,69 @@ def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):
             print()
 
 
+# ── output guard: links (phase 6) ──
+# The injection test: a poisoned document made the model append the
+# attacker's link 4-8 times out of 8 under every prompt defence — and one
+# sentence of stronger wording beat delimiting and escaping, 8/8. Only a
+# code check on the output held, 32 of 32. A prompt lowers the odds; an
+# allow-list on what leaves the system removes them for this class.
+#
+# An ALLOW-list, not "is the link in the sources": a poisoned source
+# contains it. Bare domains and e-mail addresses count too — an attacker
+# does not need the https://.
+ALLOWED_DOMAINS = ("e-gov.go.jp", "mhlw.go.jp")
+DOMAIN_RE = re.compile(r"(?:https?://|[A-Za-z0-9._%+-]+@)?((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})"
+                       r"(?:[/:?#][^\s「」『』、。（）()]*)?")
+LINK_MASK = "［リンク削除］"
+
+
+def _allowed(domain):
+    d = domain.lower()
+    return any(d == a or d.endswith("." + a) for a in ALLOWED_DOMAINS)
+
+
+def guard_links(text):
+    """-> (text with every non-allow-listed link masked, blocked domains)."""
+    blocked = []
+
+    def repl(m):
+        if _allowed(m.group(1)):
+            return m.group(0)
+        blocked.append(m.group(1))
+        return LINK_MASK
+    return DOMAIN_RE.sub(repl, text), blocked
+
+
+_URL_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                 "0123456789.-:/?#&=%_@+~")
+
+
+class StreamGuard:
+    """guard_links for streamed text. A link must not be half-sent before it
+    can be checked, so a trailing run of URL-like characters is held back
+    until something else follows it. Everything emitted is cut at a non-URL
+    character, so no link ever straddles two emitted chunks."""
+
+    def __init__(self):
+        self.raw, self.sent, self.blocked = "", 0, []
+
+    def push(self, delta):
+        self.raw += delta
+        cut = len(self.raw)
+        while cut > self.sent and self.raw[cut - 1] in _URL_CHARS:
+            cut -= 1
+        return self._emit(cut)
+
+    def flush(self):
+        return self._emit(len(self.raw))
+
+    def _emit(self, cut):
+        chunk, blocked = guard_links(self.raw[self.sent:cut])
+        self.sent = cut
+        self.blocked += blocked
+        return chunk
+
+
 def print_quotes(info):
     if info["claims"]:
         print(f"  утверждений с [N]: {info['claims']}, с дословной цитатой: "
@@ -961,7 +1028,7 @@ def main():
             tracing.documents(rs, ch)
         ans = generate(query, ch, system=SYSTEM_QUOTES if quotes else SYSTEM_BASE)
         tracing.set_attrs(sp, {"output.value": ans})
-    print(f"\n{ans}\n")
+    print(f"\n{guard_links(ans)[0]}\n")
     print("— источники —")
     for i, c in enumerate(ch, 1):
         print(f"[{i}] {c['law_title'][:24]} {c['article_title']}"

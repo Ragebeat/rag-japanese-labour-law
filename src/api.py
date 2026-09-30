@@ -31,7 +31,8 @@ from pydantic import BaseModel, Field
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import rerank  # noqa: E402
 from generate import (DEFAULT_MODE, GEN_OPTIONS, MODEL, SYSTEM,  # noqa: E402
-                      TOP_K, Reranked, build_context, inspect, retrieve)
+                      TOP_K, Reranked, StreamGuard, build_context,
+                      guard_links, inspect, retrieve)
 
 OLLAMA = "http://localhost:11434/api/chat"
 
@@ -74,12 +75,14 @@ def _sources(chunks):
     } for i, c in enumerate(chunks, 1)]
 
 
-def _payload(question, chunks, answer):
+def _payload(question, chunks, answer, blocked=()):
     info = inspect(answer, chunks)
     used = set(info["marks"])
     return {
         "question": question,
         "answer": answer,
+        # Links masked by the output guard before the answer left the server.
+        "blocked_links": list(blocked),
         "verdict": info["verdict"],
         "sources": _sources(chunks),
         "used": sorted(used),
@@ -116,7 +119,8 @@ async def ask(req: Ask):
         "options": GEN_OPTIONS,
     })
     r.raise_for_status()
-    return _payload(req.q, chunks, r.json()["message"]["content"].strip())
+    answer, blocked = guard_links(r.json()["message"]["content"].strip())
+    return _payload(req.q, chunks, answer, blocked)
 
 
 def _sse(event, data):
@@ -151,6 +155,9 @@ async def ask_stream(req: Ask):
             "options": GEN_OPTIONS,
         }
         parts = []
+        # The guard sits between the model and the socket: a link is held
+        # back until it is complete and checked — never half-sent.
+        guard = StreamGuard()
         try:
             async with state["http"].stream("POST", OLLAMA, json=body) as resp:
                 resp.raise_for_status()
@@ -161,16 +168,23 @@ async def ask_stream(req: Ask):
                     delta = piece.get("message", {}).get("content", "")
                     if delta:
                         parts.append(delta)
-                        yield _sse("delta", {"text": delta})
+                        safe = guard.push(delta)
+                        if safe:
+                            yield _sse("delta", {"text": safe})
                     if piece.get("done"):
                         break
         except Exception as e:                      # noqa: BLE001
             yield _sse("error", {"message": str(e)})
             return
+        tail = guard.flush()
+        if tail:
+            yield _sse("delta", {"text": tail})
 
         # The analysis runs on the complete text: markers and the verdict are
-        # only fully visible at the end.
-        yield _sse("done", _payload(req.q, chunks, "".join(parts).strip()))
+        # only fully visible at the end. The answer is the guarded one — the
+        # same text the user just saw streamed.
+        answer = guard_links("".join(parts).strip())[0]
+        yield _sse("done", _payload(req.q, chunks, answer, guard.blocked))
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache",

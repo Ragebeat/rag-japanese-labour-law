@@ -68,6 +68,7 @@ from agent import (FINAL_BASE, FINAL_DEFAULT, FINAL_HEAD, LLM_TIMEOUT,  # noqa: 
                    TOOL_NAME, URL, Budget, Progress, Tool, _error, chat,
                    fallback)
 import tracing  # noqa: E402
+from generate import guard_links  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MEMORY_FILE = ROOT / "data" / "user_memory.json"   # in .gitignore: personal data
@@ -131,6 +132,41 @@ EMPLOYMENT = {"正社員": ["正社員"], "パート": ["パート"],
               "アルバイト": ["アルバイト", "バイト"], "契約社員": ["契約社員"],
               "派遣": ["派遣"]}
 
+# Prefecture: a closed list, not "a string the user typed". The first
+# check accepted any value literally present in the user's text — so a long
+# instruction passed off as a prefecture would pass, get confirmed, and land
+# in the SYSTEM PROMPT of every later conversation: a stored injection.
+# (It also had a bug: rstrip("都道府県") strips any of those characters,
+# turning 京都府 into 京.) Memory is a persistence mechanism; what goes in
+# must be one of 47 known values.
+PREFECTURES = (
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+    "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+    "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+    "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+    "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+)
+
+
+def _short(p):
+    # 北海道 is written whole; the rest drop the suffix (群馬, 京都, 東京).
+    return p if p == "北海道" else p[:-1]
+
+
+def canonical_prefecture(value, said):
+    """The full name if value is a real prefecture AND the user named it;
+    otherwise None. Stored canonically, so 群馬 and 群馬県 are one fact."""
+    if not isinstance(value, str):
+        return None
+    v = unicodedata.normalize("NFKC", value).strip()
+    for p in PREFECTURES:
+        if v in (p, _short(p)) and _short(p) in said:
+            return p
+    return None
+
+
 EXTRACT = """ユーザーの発言から、本人が明言した事実だけを抽出してください。
 推測はしない。発言に書かれていないものは必ず null にする。
 - employment_type: 正社員 / パート / アルバイト / 契約社員 / 派遣 のいずれか
@@ -167,6 +203,19 @@ def save_store(store):
                                       indent=2), encoding="utf-8")
 
 
+def _valid(field, value):
+    """The same closed sets on the way OUT of memory as on the way in: the
+    file can be edited by hand or hold values from an older, looser check,
+    and whatever passes here lands in the system prompt."""
+    if field == "employment_type":
+        return value in EMPLOYMENT
+    if field == "company_size":
+        return isinstance(value, int) and 0 < value < 10_000_000
+    if field == "prefecture":
+        return value in PREFECTURES
+    return False
+
+
 def system_prompt(store):
     """The system prompt with the long-term facts, rebuilt every turn.
 
@@ -178,10 +227,14 @@ def system_prompt(store):
         return SYSTEM
     today, lines = date.today(), []
     for k, v in prof.items():
+        if not _valid(k, v.get("value")):
+            continue
         age = (today - date.fromisoformat(v["stated_at"])).days
         stale = "（古い情報・使う前に本人に確認すること）" if age > STALE_DAYS else ""
         lines.append(f"- {LABELS[k]}: {v['value']}"
                      f"（{v['stated_at']} に本人が述べた）{stale}")
+    if not lines:
+        return SYSTEM
     return (SYSTEM + "\n\n【このユーザーについて本人が以前述べた事実】\n"
             + "\n".join(lines) + "\n回答に関係する場合のみ使うこと。")
 
@@ -214,8 +267,8 @@ def verify_stated(facts, text):
     cs = facts.get("company_size")
     if isinstance(cs, int) and cs > 0 and str(cs) in t:
         out["company_size"] = cs
-    pf = facts.get("prefecture")
-    if isinstance(pf, str) and pf.rstrip("都道府県") and pf.rstrip("都道府県") in t:
+    pf = canonical_prefecture(facts.get("prefecture"), t)
+    if pf:
         out["prefecture"] = pf
     return out
 
@@ -468,8 +521,12 @@ def build(tool, http, store, hitl=False, trace=False):
 
 def show(values):
     b = values.get("budget") or {}
+    # The output guard at the boundary where the answer reaches a person.
+    answer, blocked = guard_links(values.get("answer", ""))
     print("\n— ответ —")
-    print(values.get("answer", ""))
+    print(answer)
+    if blocked:
+        print(f"⚠ ссылки вне белого списка вырезаны: {blocked}")
     print(f"\n[стоп: {values.get('stop')}  итераций: {b.get('iters')}  "
           f"токенов: {b.get('tokens')}  время: {b.get('spent', 0):.1f}s]")
     if values.get("ungrounded"):

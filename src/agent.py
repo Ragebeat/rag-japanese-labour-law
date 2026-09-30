@@ -27,7 +27,7 @@ import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from generate import (KW, MODEL, POOL_MULT, URL, _by_article,  # noqa: E402
-                      dedupe_by_article, whole_article)
+                      dedupe_by_article, guard_links, whole_article)
 from query_expand import expand  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
 from rerank import Reranked  # noqa: E402
@@ -542,7 +542,12 @@ def _run(question, tool, trace=False):
 
 
 def _result(answer, stop, budget, found, ungrounded=False):
-    return {"answer": answer, "stop": stop, "iterations": budget.iters,
+    # The output guard, same allow-list as generate.py and api.py. Every
+    # final answer — the model's, the final turn's, the fallback — passes
+    # through here, so this is the one place to put it.
+    answer, blocked = guard_links(answer)
+    return {"answer": answer, "blocked_links": blocked,
+            "stop": stop, "iterations": budget.iters,
             "tokens": budget.tokens, "seconds": round(budget.elapsed(), 1),
             "found": found, "ungrounded": ungrounded, "prompts": budget.prompts}
 
