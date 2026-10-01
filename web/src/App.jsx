@@ -83,6 +83,8 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [active, setActive] = useState(null);
   const [ms, setMs] = useState(null);
+  // Сколько запросов впереди в очереди сервера; null — не в очереди.
+  const [ahead, setAhead] = useState(null);
   const abort = useRef(null);
 
   useEffect(() => localStorage.setItem("lang", lang), [lang]);
@@ -98,24 +100,34 @@ export default function App() {
     setSources([]);
     setMeta(null);
     setActive(null);
+    setAhead(null);
     const t0 = performance.now();
     try {
       await streamAsk(
         question,
         {
-          sources: (d) => setSources(d.sources),
+          queued: (d) => setAhead(d.ahead),
+          sources: (d) => {
+            setAhead(null);
+            setSources(d.sources);
+          },
           delta: (d) => setRaw((prev) => prev + d.text),
           done: (d) => {
             setMeta(d);
             setMs(Math.round(performance.now() - t0));
           },
-          error: (d) => setErr(d.message),
+          // Сервер шлёт код, а не текст исключения: текст переводим здесь.
+          error: (d) => {
+            setAhead(null);
+            setErr(t.errors[d.code] ?? d.message ?? d.code);
+          },
         },
         abort.current.signal
       );
     } catch (e) {
       if (e.name !== "AbortError") setErr(String(e));
     } finally {
+      setAhead(null);
       setBusy(false);
     }
   }
@@ -173,7 +185,11 @@ export default function App() {
             </div>
           )}
           {body && <Answer text={body} onPick={setActive} active={active} />}
-          {busy && !body && <div className="hint">{t.working}</div>}
+          {busy && !body && (
+            <div className="hint">
+              {ahead ? `${t.queued}: ${ahead}` : t.working}
+            </div>
+          )}
 
           {meta && (
             <div className="panel">

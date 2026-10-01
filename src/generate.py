@@ -151,6 +151,7 @@ def run_config(system, mode):
                       "article_cap": ARTICLE_CAP},
         "expander": getattr(query_llm, "MODEL", None),
         "reranker": getattr(rerank, "MODEL", None),
+        "reranker_revision": getattr(rerank, "REVISION", None),
     }
 
 

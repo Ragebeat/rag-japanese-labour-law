@@ -27,6 +27,12 @@ from query_llm import expand_combo  # noqa: E402
 import tracing  # noqa: E402
 
 MODEL = "BAAI/bge-reranker-v2-m3"
+# Pinned commit on Hugging Face (phase 6, OWASP supply chain). Without it the
+# model is "whatever main points to" on the next fresh download: new weights
+# would silently move every rerank score — and the score gate threshold with
+# them. Part of the run fingerprint. Change on purpose, then re-run
+# score_gate.py and --eval.
+REVISION = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
 POOL = 20          # how many candidates to hand to the reranker
 
 _model = None
@@ -37,7 +43,7 @@ def _get():
     if _model is None:
         from sentence_transformers import CrossEncoder
         print(f"загрузка {MODEL}...", file=sys.stderr)
-        _model = CrossEncoder(MODEL, max_length=512)
+        _model = CrossEncoder(MODEL, max_length=512, revision=REVISION)
     return _model
 
 

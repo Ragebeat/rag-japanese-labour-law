@@ -12,6 +12,9 @@ wheels/
 
 # Long-term agent memory: facts a user stated about themselves. Personal data,
 # never committed — data/ is otherwise tracked, so this rule must exist.
+# Phase 6: one file per user under data/memory/; the old single file stays
+# listed in case a copy is left behind.
+data/memory/
 data/user_memory.json
 
 # Front end

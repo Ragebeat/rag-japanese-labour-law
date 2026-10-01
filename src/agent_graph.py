@@ -49,6 +49,7 @@ than the code:
 
 import json
 import pathlib
+import re
 import sys
 import time
 import unicodedata
@@ -71,9 +72,40 @@ import tracing  # noqa: E402
 from generate import guard_links  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MEMORY_FILE = ROOT / "data" / "user_memory.json"   # in .gitignore: personal data
-NS = ("users", "local", "profile")
+MEMORY_DIR = ROOT / "data" / "memory"   # one file per user; in .gitignore: personal data
 STALE_DAYS = 90
+
+# Phase 6, OWASP review. The namespace used to be ("users", "local",
+# "profile") with one file: harmless while the graph is a CLI for one
+# person, a cross-user leak the day it is put behind an API — user B would
+# get user A's facts in the system prompt. Now every memory function
+# REQUIRES a user_id, so wiring the graph to an API cannot forget isolation:
+# without an id the code does not run.
+#
+# The id comes from authentication at the entry point — never from the
+# request body, never from the model. It also becomes a file name, hence the
+# strict pattern: "../profile" must not escape data/memory/.
+USER_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def namespace(user_id):
+    if not isinstance(user_id, str) or not USER_ID_RE.fullmatch(user_id):
+        raise ValueError(f"invalid user_id: {user_id!r}")
+    return ("users", user_id, "profile")
+
+
+def memory_file(user_id):
+    namespace(user_id)                     # validates before touching the disk
+    return MEMORY_DIR / f"{user_id}.json"
+
+
+def check_owner(values, user_id):
+    """A thread belongs to whoever started it. The checkpointer keys history
+    by thread_id alone; if a thread_id ever comes from a client, knowing
+    someone's id would be enough to read their conversation (IDOR)."""
+    owner = values.get("owner")
+    if owner is not None and owner != user_id:
+        raise PermissionError("thread belongs to another user")
 
 
 class State(TypedDict, total=False):
@@ -91,6 +123,7 @@ class State(TypedDict, total=False):
     budget: dict | None
     progress: dict | None
     proposal: dict | None
+    owner: str           # user_id that started the thread — see check_owner
 
 
 # ─────────────────────── state <-> the tested objects ────────────────────────
@@ -186,21 +219,25 @@ EXTRACT_SCHEMA = {
 }
 
 
-def load_store():
-    store = InMemoryStore()
-    if MEMORY_FILE.exists():
-        for k, v in json.loads(MEMORY_FILE.read_text(encoding="utf-8")).items():
-            store.put(NS, k, v)
+def load_store(user_id, store=None):
+    """Loads one user's file into their namespace (of a shared store, if given)."""
+    store = store or InMemoryStore()
+    path = memory_file(user_id)
+    if path.exists():
+        for k, v in json.loads(path.read_text(encoding="utf-8")).items():
+            store.put(namespace(user_id), k, v)
     return store
 
 
-def profile(store):
-    return {it.key: it.value for it in store.search(NS)}
+def profile(store, user_id):
+    return {it.key: it.value for it in store.search(namespace(user_id))}
 
 
-def save_store(store):
-    MEMORY_FILE.write_text(json.dumps(profile(store), ensure_ascii=False,
-                                      indent=2), encoding="utf-8")
+def save_store(store, user_id):
+    path = memory_file(user_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(profile(store, user_id), ensure_ascii=False,
+                               indent=2), encoding="utf-8")
 
 
 def _valid(field, value):
@@ -216,13 +253,13 @@ def _valid(field, value):
     return False
 
 
-def system_prompt(store):
+def system_prompt(store, user_id):
     """The system prompt with the long-term facts, rebuilt every turn.
 
     Staleness is decided by code, not left to the model: a fact older than
     STALE_DAYS is marked for re-confirmation.
     """
-    prof = profile(store)
+    prof = profile(store, user_id)
     if not prof:
         return SYSTEM
     today, lines = date.today(), []
@@ -275,7 +312,7 @@ def verify_stated(facts, text):
 
 # ─────────────────────────────── the graph ───────────────────────────────────
 
-def build(tool, http, store, hitl=False, trace=False):
+def build(tool, http, store, user_id, hitl=False, trace=False):
     t_start = time.monotonic()
 
     def log(s):
@@ -450,7 +487,7 @@ def build(tool, http, store, hitl=False, trace=False):
         # interrupt() runs twice, and so would the call.
         said = "\n".join([s.get("question", "")] + s.get("human_notes", []))
         facts = verify_stated(extract_facts(http, said), said)
-        current = profile(store)
+        current = profile(store, user_id)
         new = {k: v for k, v in facts.items()
                if current.get(k, {}).get("value") != v}
         log(f"[propose] извлечено и проверено: {facts} → новое: {new}")
@@ -462,8 +499,8 @@ def build(tool, http, store, hitl=False, trace=False):
         if str(ans).strip().lower() in ("y", "yes", "д", "да", "はい"):
             today = date.today().isoformat()
             for k, v in s["proposal"].items():
-                store.put(NS, k, {"value": v, "stated_at": today})
-            save_store(store)
+                store.put(namespace(user_id), k, {"value": v, "stated_at": today})
+            save_store(store, user_id)
             log(f"[confirm_memory] сохранено: {s['proposal']}")
         else:
             log("[confirm_memory] отказ — ничего не сохранено")
@@ -533,23 +570,26 @@ def show(values):
         print("⚠ ответ без единого поиска")
 
 
-def run_turn(graph, thread, q, store):
+def run_turn(graph, thread, q, store, user_id):
     """One turn = one trace. The span also covers a human-in-the-loop pause:
     the trace's wall time then includes waiting for a person, while the
     model and tool spans inside show only their own time."""
     with tracing.span("agent_graph.turn", "AGENT", input=q,
                       attrs={"session.id": thread}):
-        _run_turn(graph, thread, q, store)
+        _run_turn(graph, thread, q, store, user_id)
 
 
-def _run_turn(graph, thread, q, store):
+def _run_turn(graph, thread, q, store, user_id):
     config = {"configurable": {"thread_id": thread}}
-    prev = graph.get_state(config).values.get("messages") or []
+    st = graph.get_state(config).values
+    check_owner(st, user_id)               # before reading a single message
+    prev = st.get("messages") or []
     # The system prompt is replaced every turn: it carries the CURRENT
     # long-term facts, including ones confirmed a minute ago.
-    msgs = [{"role": "system", "content": system_prompt(store)}] + prev[1:] + [
+    msgs = [{"role": "system", "content": system_prompt(store, user_id)}] + prev[1:] + [
         {"role": "user", "content": q}]
     out = graph.invoke({"messages": msgs, "question": q, "human_notes": [],
+                        "owner": user_id,
                         "found": [], "stop": None, "answer": "", "weak_qs": [],
                         "called": False, "nudged": False, "reframed": False,
                         "ungrounded": False, "budget": None, "progress": None,
@@ -578,7 +618,7 @@ def main():
     args = sys.argv[1:]
     if "--mermaid" in args:
         # Drawing needs no models: nodes are never executed.
-        print(build(None, None, None).get_graph().draw_mermaid())
+        print(build(None, None, None, None).get_graph().draw_mermaid())
         return
 
     trace, hitl = "--trace" in args, "--hitl" in args
@@ -587,15 +627,18 @@ def main():
     print(f"порог (5-й перцентиль, score_gate.json): {THRESHOLD:.3f}")
     tracing.setup()
     tool = Tool()
-    store = load_store()
-    prof = profile(store)
+    # The CLI's authentication is the OS session: whoever runs it is the
+    # one user. An API would take the id from its auth layer, right here.
+    user_id = "local"
+    store = load_store(user_id)
+    prof = profile(store, user_id)
     print(f"долгая память: {json.dumps(prof, ensure_ascii=False) if prof else 'пусто'}")
     print("команды: /new — новый разговор · /mem — что помню · "
           "/forget — забыть всё · /quit")
 
     thread = str(uuid.uuid4())
     with httpx.Client() as http:
-        graph = build(tool, http, store, hitl=hitl, trace=trace)
+        graph = build(tool, http, store, user_id, hitl=hitl, trace=trace)
         pending = first
         while True:
             q = pending or input("\n? ").strip()
@@ -609,16 +652,16 @@ def main():
                 print("— новый разговор: короткая память пуста, долгая осталась")
                 continue
             if q == "/mem":
-                prof = profile(store)
+                prof = profile(store, user_id)
                 print(json.dumps(prof, ensure_ascii=False, indent=2) if prof else "пусто")
                 continue
             if q == "/forget":
-                for k in list(profile(store)):
-                    store.delete(NS, k)
-                save_store(store)
+                for k in list(profile(store, user_id)):
+                    store.delete(namespace(user_id), k)
+                save_store(store, user_id)
                 print("— долгая память удалена (строки стёрты из файла)")
                 continue
-            run_turn(graph, thread, q, store)
+            run_turn(graph, thread, q, store, user_id)
 
 
 if __name__ == "__main__":

@@ -14,9 +14,25 @@ setting: Phoenix now, Langfuse later, same code.
 Opt-in. Without TRACE=1 the tracer is OpenTelemetry's no-op and nothing is
 sent — evaluation runs do not depend on a tracing server being up.
 
-  docker run -d -p 6006:6006 --name phoenix arizephoenix/phoenix:latest
+  docker run -d -p 127.0.0.1:6006:6006 --name phoenix arizephoenix/phoenix@sha256:d55a4ffac8c670e2d0bf72e44e81e32a73e832b7ce449e6e4567487adfa9d8d6
   $env:TRACE=1; uv run python src/agent.py "有給はいつから？"
   -> http://localhost:6006
+
+Pinned by digest, not :latest (phase 6, supply chain): a tag can be moved
+to a different image, a digest cannot. 127.0.0.1 — traces are not for the LAN.
+
+Content is OFF by default (phase 6, OWASP review). Traces kept every
+message whole: user questions, the system prompt, and in agent_graph the
+long-term memory inside it — stored with no retention and no auth, on a
+port published to the whole LAN. Every phase 6 finding from traces came
+from metadata (durations, tokens, load_ms, pair counts); content is needed
+only to debug behaviour — what the model searched, why it refused. So:
+metadata always, content on purpose:
+
+  $env:TRACE_CONTENT=1   # questions, prompts, answers, tool arguments
+
+Statute text in retrieval.documents is NOT masked: the corpus is public
+law, and article ids alone would make a retrieval span unreadable.
 
 Two things that break a trace silently, both handled here:
 - OTel attribute values must be primitives or lists of primitives. Chat
@@ -42,6 +58,13 @@ PROJECT = os.environ.get("TRACE_PROJECT", "labor-rag")
 # exporter retried synchronously on every span — slowing the agent itself.
 ENDPOINT = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces")
 MAX_TEXT = 8000          # characters per attribute; whole articles are longer
+
+# What counts as content: anything the user typed or the model wrote, and
+# anything carrying them — the query the reranker saw, the expansion terms
+# (derived from the question), tool-call arguments.
+CONTENT = os.environ.get("TRACE_CONTENT") == "1"
+CONTENT_KEYS = {"input.value", "output.value", "reranker.query", "rag.expansion.terms"}
+CONTENT_SUFFIXES = (".message.content", ".function.arguments")
 
 _tracer = trace.get_tracer("labor-rag")   # no-op until setup() registers a provider
 
@@ -69,10 +92,25 @@ def _ok(v):
     return isinstance(v, prim) or (isinstance(v, (list, tuple)) and all(isinstance(x, prim) for x in v))
 
 
+def _is_content(key):
+    return key in CONTENT_KEYS or key.endswith(CONTENT_SUFFIXES)
+
+
+def _redact(v):
+    """The length survives: "the final answer was 900 characters" is a
+    metadata finding, what it said is not."""
+    s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, default=str)
+    return f"[скрыто: {len(s)} симв.]"
+
+
 def set_attrs(sp, attrs):
+    """The ONE place attributes are written — the content mask lives here,
+    so no caller can bypass it by accident."""
     for k, v in (attrs or {}).items():
         if v is None:
             continue
+        if not CONTENT and _is_content(k):
+            v = _redact(v)
         sp.set_attribute(k, v if _ok(v) else _text(v))
 
 
@@ -84,13 +122,21 @@ def span(name, kind, input=None, attrs=None):
     with _tracer.start_as_current_span(name) as sp:
         sp.set_attribute("openinference.span.kind", kind)
         if input is not None:
-            sp.set_attribute("input.value", _text(input))
+            set_attrs(sp, {"input.value": input})   # through the mask
         set_attrs(sp, attrs)
         try:
             yield sp
         except Exception as e:
-            sp.record_exception(e)
-            sp.set_status(Status(StatusCode.ERROR, str(e)[:200]))
+            # The exception message can carry content (a failed request echoes
+            # the query, a parse error quotes the model's output). With content
+            # off only the type goes into the trace; details stay in the log.
+            if CONTENT:
+                sp.record_exception(e)
+                desc = str(e)[:200]
+            else:
+                sp.set_attribute("exception.type", type(e).__name__)
+                desc = type(e).__name__
+            sp.set_status(Status(StatusCode.ERROR, desc))
             raise
         sp.set_status(Status(StatusCode.OK))
 
