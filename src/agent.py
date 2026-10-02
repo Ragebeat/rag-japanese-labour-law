@@ -205,7 +205,7 @@ class Tool:
                     set(), None, None)
 
         keys, top = {_key(c) for c in hits}, _top(hits)
-        exp = _expansion(query)
+        exp = ("выкл", []) if KW.get("mode") == "vector" else _expansion(query)
 
         if top is not None and top >= THRESHOLD:
             return {

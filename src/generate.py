@@ -38,6 +38,7 @@ from rerank import Reranked  # noqa: E402
 import hybrid  # noqa: E402
 from jnum import NUM, art_key, fmt as _fmt, num  # noqa: E402
 import tracing  # noqa: E402
+from query_expand import synonyms  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -130,7 +131,7 @@ GEN_OPTIONS = {"temperature": 0, "num_ctx": 32_768}
 # Bump CONTEXT_FORMAT by hand whenever build_context() / whole_article()
 # change what the model sees: code is not part of the fingerprint, so a
 # format change would otherwise hide under the same hash.
-CONTEXT_FORMAT = "whole + 「（第N項）」 labels, 2026-09-29"
+CONTEXT_FORMAT = "whole + 「（第N項）」 labels + 【用語の対応】 hint, 2026-10-02"
 RUNS_DIR = ROOT / "data" / "runs"
 RUNS_LOG = ROOT / "data" / "runs.jsonl"
 
@@ -259,6 +260,17 @@ def build_context(chunks):
     return "\n\n".join(parts)
 
 
+def term_hint(query):
+    """Colloquial -> statutory term pairs from data/synonyms.json (the same
+    dictionary hybrid.py uses for SEARCH), shown to the generator too. Search
+    expands the query; the generator used to see only the raw question and
+    refused #22 (失業保険 vs 基本手当 in the article). First term only,
+    as in narrow mode: a long tail dilutes."""
+    pairs = [f"{s}＝{l[0]}" for s, l in synonyms().items()
+             if s in query and l[0] not in query]
+    return "\n\n【用語の対応】" + "、".join(pairs) if pairs else ""
+
+
 def generate(query, chunks, client=None, system=SYSTEM, builder=None):
     # builder: an alternative context format (phase 6 injection test wraps
     # documents in <document> tags). Default: build_context.
@@ -268,7 +280,7 @@ def generate(query, chunks, client=None, system=SYSTEM, builder=None):
         messages = [
             {"role": "system", "content": system},
             {"role": "user",
-             "content": f"【条文】\n{(builder or build_context)(chunks)}\n\n【質問】\n{query}"},
+             "content": f"【条文】\n{(builder or build_context)(chunks)}\n\n【質問】\n{query}{term_hint(query)}"},
         ]
         with tracing.span("generate", "LLM") as sp:
             tracing.llm_request(sp, MODEL, messages, GEN_OPTIONS)
