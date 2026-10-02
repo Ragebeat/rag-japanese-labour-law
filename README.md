@@ -22,7 +22,32 @@ Built as a portfolio project, but with production-grade measurement discipline: 
 
 **recall@5: 0.68 → 0.88. MRR: 0.495 → 0.720.**
 
-On the generation side: the citation contract holds in 50 out of 50 answers, and there are 0 citations to articles absent from the context.
+### Swapping the embedder: BGE-M3 → Ruri-v3
+
+Bare vector search on the core slice, no expansion and no reranker, same 50 questions:
+
+| Model | r@1 | r@5 | r@10 | r@20 | MRR |
+|---|---|---|---|---|---|
+| bge-m3 | 0.38 | 0.68 | 0.76 | 0.92 | 0.51 |
+| multilingual-e5-large | 0.52 | 0.76 | 0.78 | 0.86 | 0.61 |
+| **ruri-v3-310m** | **0.56** | **0.86** | **0.94** | **1.00** | **0.71** |
+
+r@20 is reported because the reranker works on a pool of 20: it is the ceiling for what comes after. By r@5 alone e5 beats BGE-M3, by r@20 it loses.
+
+Full pipeline:
+
+| Configuration | r@5 | sec/query |
+|---|---|---|
+| bge-m3 + expansion + reranking | 0.86 | 15.6 |
+| ruri-v3 alone | 0.86 | 0.2 |
+| **ruri-v3 + reranking** | **0.94** | 15.2 |
+| ruri-v3 + expansion + reranking | 0.96 | 14.0 |
+
+Bare Ruri equals the whole tuned BGE-M3 pipeline. The configuration adopted is Ruri + reranker **without** query expansion: the 0.02 that expansion adds is one question, and the dictionary is the one component developed against this golden set, so its gain on this set is optimistic. 0.94 is the figure without that bias.
+
+Generation, same prompt, BGE-M3 → Ruri: context recall 0.88 → 0.94, claim coverage by verbatim quotes 0.57 → 0.64, text matching the source 0.62 → 0.68, paragraph-label errors 3 → 0.
+
+On the generation side (BGE-M3 runs): the citation contract holds in 50 out of 50 answers, and there are 0 citations to articles absent from the context. The Ruri runs are not at that level yet: see Caveats.
 
 ---
 
@@ -96,6 +121,9 @@ A layer of issues that does not exist in English corpora:
 - **`normalized_form()` returns a canonical orthography, not a dictionary form**: `する → 為る`, `十 → 10`, `雇入れ → 雇い入れ`. Those spellings appear neither in the statute nor in the query. Solution: filter on the normalised form, index the surface form
 - **Article numbers are written inconsistently**: 第39条 / 第三十九条 / 第３９条. Normalisation lives in its own module (`jnum.py`) and comparison happens on canonical pairs
 - **Cross-references**: 「法第二十五条第一項の…」. An article named that way in an answer is neither a hallucination nor a source — it is a third category and is counted separately
+- **Colloquial wording is not statutory wording.** 失業保険 does not occur in the Employment Insurance Act; the article says 基本手当. Retrieval put the article first, yet the generator refused on that same context 9 times out of 10; the question rewritten as 基本手当 gave 0 refusals out of 10. A general prompt rule fixed it at a price (see *What did not work*). What worked was showing the generator the colloquial → statutory pairs the search dictionary already holds, as a `【用語の対応】` line after the question
+- **Width variants of the query.** Measured on perturbed copies of the 50 questions: full-width digits and Latin (３６協定) cost nothing, the embedder handles them; half-width kana (ﾊﾟﾜﾊﾗ) lost 2 of the 11 questions it touched; a trailing space lost 1. `fold_query()` converts half-width kana and strips the query. Full NFKC was rejected: it also turns ？ and （） into ASCII, away from the form used in the corpus. Old/new kanji forms were not measured
+- **Index parameters belong to the model.** Overlap of the HNSW top-20 with exact search on Ruri: `ef_search` 40 → 0.914, 100 → 0.973, 200 → 0.998. A value tuned on another model silently loses part of the candidate pool; 200 is used
 
 ---
 
@@ -155,6 +183,12 @@ It failed for a fundamental reason: **the cross-encoder does not discriminate be
 
 The signal is absent in both the LLM and the reranker. Tuning a rule on top of noise is not worth doing.
 
+### A prompt rule against over-refusal
+
+Two questions got a refusal with the gold article in the context. One is a false premise ("will five years of work make me a regular employee?": the article is about conversion to an open-ended contract, not to 正社員; refused 10 times out of 10, which is defensible). The other is the vocabulary gap described above.
+
+A general rule in the prompt ("a colloquial wording that differs only in vocabulary is not a reason to refuse") removed one over-refusal and cost quality: claim coverage 0.63 → 0.57 (means of three runs each, old prompt as the control; the ranges do not overlap), with regressions on four other questions. Reverted. A vocabulary problem is better fixed in the data the model sees than in the rules it follows.
+
 ---
 
 ## Refusal when the source is absent
@@ -212,11 +246,14 @@ Each time this replaced a heuristic with an exact match.
 
 Read these before using the numbers.
 
-- **`recall@5 = 0.88` is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began
+- **`recall@5 = 0.88` (the BGE-M3 pipeline) is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began
 - **The manual annotation of 20 answers was produced by a model** (Claude, via an agent), not a human. It is a second opinion with access to the primary source, not a human gold standard
 - **Two of the four judges are cloud-hosted** (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`). The rest of the system is fully local
 - **All generation numbers were obtained with `gemma4:e4b`.** Changing the generator makes them incomparable
 - **The golden set is 50 questions.** A difference below 0.02 on this sample is noise and is not grounds for choosing a configuration
+- **Generation is not deterministic even at temperature 0.** On one fixed context the same question gave 1 refusal in 3 runs in one session and 9 in 10 in another; claim coverage of one configuration moves by 0.04–0.08 between identical runs. Configurations here are compared over three runs, with control reruns of the baseline
+- **The query-expansion dictionary and the generator's term hint are one file** (`data/synonyms.json`, 27 pairs). Ten of its keys never occur in the golden questions, but 25 of the 50 questions contain one, and a check on fresh questions was not done. The gain on this set is optimistic
+- **Citation validity on the Ruri runs is below 1.000**: 0.980 in the last run of the adopted configuration (0.985 in the earlier prompt-rule experiment), i.e. 3 invented article references across 50 answers in the last run. The 50/50 figure above is from the BGE-M3 runs
 
 ---
 
@@ -225,6 +262,7 @@ Read these before using the numbers.
 - **Paragraph selection within an article is uncontrolled.** The reranker does not discriminate between paragraphs, the generator picks arbitrarily, the judge sees no difference. The fix belongs earlier in the pipeline: require the generator to name the applicable paragraph explicitly
 - A router for queries that cite an article number directly — lexical lookup beats vector search there, but it needs its own evaluation slice
 - **Latency.** A full answer takes about 30 seconds on a GTX 1060: roughly 15 for reranking twenty pairs, the rest for generation. Candidates for speeding it up: reranking the top 10 instead of 20, or a quantised cross-encoder — either changes the configuration and requires re-measuring everything
+- **The score-based refusal gate does not work on Ruri.** AUC 0.62 between hits and misses; the median top-1 score of a miss (+0.535) is higher than that of a hit (+0.363), because the reranker is confident in a neighbouring article. With 3 natural misses in 50 questions it cannot be re-tuned: revisit when the golden set has at least 10
 - RAGAS, as a cross-check against this project's own metric implementation
 
 ---
