@@ -35,6 +35,7 @@ import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rerank import Reranked  # noqa: E402
+import hybrid  # noqa: E402
 from jnum import NUM, art_key, fmt as _fmt, num  # noqa: E402
 import tracing  # noqa: E402
 
@@ -152,6 +153,7 @@ def run_config(system, mode):
         "expander": getattr(query_llm, "MODEL", None),
         "reranker": getattr(rerank, "MODEL", None),
         "reranker_revision": getattr(rerank, "REVISION", None),
+        "embedder": hybrid.EMBEDDER,
     }
 
 
@@ -556,8 +558,12 @@ def check_quotes(body, chunks):
 
 # ──────────────────────────────────── cli ────────────────────────────────────
 
-KW = dict(mode="vector", expand_query=True, narrow=True, combo=True,
-          rerank_on="expanded")
+# Phase 7: Ruri, no query expansion. sweep.py --ruri, r@5 on golden:
+# with expansion 0.96, without 0.94 — one question net (+2 −1), noise.
+# Expansion was dropped because the dictionary was written against golden's
+# own misses (its gain there is optimistic), and it costs an LLM call per
+# query. 0.94 is the one number with nothing fitted to golden.
+KW = dict(mode="vector", rerank_on="original")
 
 POOL_MULT = 4     # how many candidates to take before collapsing: TOP_K * POOL_MULT
 ARTICLE_CAP = 3000  # characters; beyond this we do not assemble the whole article

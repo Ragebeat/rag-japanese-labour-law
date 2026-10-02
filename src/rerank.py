@@ -91,14 +91,14 @@ class Reranked:
         cands.sort(key=lambda c: -c["rerank_score"])
         return cands[:k]
 
-    def score(self, query, texts, rerank_on="expanded"):
+    def score(self, query, texts, rerank_on="original"):
         """Scores arbitrary texts against a query, without searching the database.
 
         Needed for the structural completeness check (verify.py): comparing
         paragraphs of one article against each other.
 
-        rerank_on defaults to 'expanded' — the same variant as the working
-        configuration (KW in generate.py). Otherwise the scores would be on a
+        rerank_on defaults to 'original' — the same variant as the working
+        configuration (KW in generate.py, phase 7). Otherwise the scores would be on a
         different scale from the ones the chunks were selected by.
         """
         if not texts:

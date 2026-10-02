@@ -39,6 +39,7 @@ tools/comments.en.json
 data/raw/
 data/meta/
 data/vectors.npy
+data/emb/
 data/chunks.jsonl
 
 # Working state and caches

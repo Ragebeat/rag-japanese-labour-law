@@ -53,6 +53,27 @@ CONFIGS = [
 POOL_SET = ("+rerank exp", "+rerank exp pool15", "+rerank exp pool10")
 OUT_POOL = ROOT / "data" / "sweep_pool.json"
 
+# --ruri (phase 7): level 2 of the embedding comparison — Ruri in the full
+# pipeline. The expansion dictionary was written against BGE-M3's misses, so
+# the question is not only "how high" but "is expansion still worth an LLM
+# call": compare "ruri +rerank orig" (no expansion anywhere) with
+# "ruri +rerank exp" (the working configuration). BGE-M3's working
+# configuration runs alongside as the reference — same session, same Ollama.
+RURI = "ruri-v3-310m"
+RURI_CONFIGS = [
+    ("bge +rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
+     "рабочая конфигурация на BGE-M3 — отсчёт", "bge-m3"),
+    ("ruri vector", dict(mode="vector"),
+     "голая Ruri, должна дать 0.86 (как embed_compare)", RURI),
+    ("ruri +словарь+LLM", BEST,
+     "расширение без реранкера", RURI),
+    ("ruri +rerank orig", dict(mode="vector", rerank=True, rerank_on="original"),
+     "реранкер без расширения — ни одного вызова LLM", RURI),
+    ("ruri +rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
+     "рабочая конфигурация на Ruri", RURI),
+]
+OUT_RURI = ROOT / "data" / "sweep_ruri.json"
+
 
 def first_hit(results, relevant):
     want = {(law, art) for law, art in relevant}
@@ -66,13 +87,17 @@ def run(h, rr, golden, kw):
     kw = dict(kw)
     use_rerank = kw.pop("rerank", False)
     rows, t0 = [], time.time()
-    for g in golden:
+    for j, g in enumerate(golden, 1):
         if use_rerank:
             res = rr.search(g["q"], k=10, core_only=True, **kw)
         else:
             res = h.search(g["q"], k=10, core_only=True, **kw)
         rows.append({"id": g["id"], "q": g["q"],
                      "pos": first_hit(res, g["relevant"])})
+        # A reranked config takes ~10 minutes with no output otherwise —
+        # indistinguishable from a hang.
+        print(f"  {j}/{len(golden)}  {time.time() - t0:.0f}с", end="\r",
+              file=sys.stderr, flush=True)
     n = len(rows)
     return {
         "recall@1": sum(1 for r in rows if r["pos"] == 1) / n,
@@ -86,27 +111,35 @@ def run(h, rr, golden, kw):
 
 def main():
     only_pool = "--pool" in sys.argv
-    configs = [c for c in CONFIGS if c[0] in POOL_SET] if only_pool else CONFIGS
-    out = OUT_POOL if only_pool else OUT
+    ruri = "--ruri" in sys.argv
     golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
-    h = Hybrid()
-    rr = Reranked(h)
+    if ruri:
+        # One Hybrid per embedder; the config's 4th field picks which.
+        engines = {e: Hybrid(embedder=e) for e in ("bge-m3", RURI)}
+        configs = [(n, kw, note, engines[e]) for n, kw, note, e in RURI_CONFIGS]
+        out = OUT_RURI
+    else:
+        h = Hybrid()
+        base = [c for c in CONFIGS if c[0] in POOL_SET] if only_pool else CONFIGS
+        configs = [(n, kw, note, h) for n, kw, note in base]
+        out = OUT_POOL if only_pool else OUT
     print(f"вопросов: {len(golden)}, срез core, база recall@5 = {BASELINE}\n")
-    print(f"{'конфиг':<16} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
+    print(f"{'конфиг':<20} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
           f"{'MRR':>6} {'сек':>6}  {'вs базы':>8}")
-    print("-" * 74)
+    print("-" * 78)
 
     report = {}
-    for name, kw, note in configs:
-        m, rows = run(h, rr, golden, kw)
+    for name, kw, note, eng in configs:
+        m, rows = run(eng, Reranked(eng), golden, kw)
         report[name] = {"params": {k: str(v) for k, v in kw.items()},
+                        "embedder": eng.embedder,
                         "note": note, "metrics": m, "rows": rows}
         delta = m["recall@5"] - BASELINE
         mark = "" if abs(delta) >= 0.02 else "  (шум)"
-        print(f"{name:<16} {m['recall@1']:>6.3f} {m['recall@3']:>6.3f} "
+        print(f"{name:<20} {m['recall@1']:>6.3f} {m['recall@3']:>6.3f} "
               f"{m['recall@5']:>6.3f} {m['recall@10']:>6.3f} "
               f"{m['MRR']:>6.3f} {m['sec']:>6.3f}  {delta:>+8.3f}{mark}")
-        print(f"{'':16} └ {note}")
+        print(f"{'':20} └ {note}")
 
     best = max(report.items(), key=lambda kv: kv[1]["metrics"]["recall@5"])
     print(f"\nлучший: {best[0]} — recall@5 = "
@@ -122,7 +155,9 @@ def main():
                  ("+rerank orig", "+rerank exp"),
                  ("+rerank orig", "+rerank pool40"),
                  ("+rerank exp", "+rerank exp pool15"),
-                 ("+rerank exp", "+rerank exp pool10")):
+                 ("+rerank exp", "+rerank exp pool10"),
+                 ("bge +rerank exp", "ruri +rerank exp"),
+                 ("ruri +rerank orig", "ruri +rerank exp")):
         if pair[0] not in report or pair[1] not in report:
             continue
         a = {r["id"]: r["pos"] for r in report[pair[0]]["rows"]}

@@ -58,6 +58,34 @@ DSN = os.environ.get(
 
 MODEL = "bge-m3"
 OLLAMA = "http://localhost:11434/api/embed"
+
+# Phase 7: the embedding model is a choice, not a constant. Bare vector
+# recall@5 on golden: bge-m3 0.68, ruri-v3-310m 0.86 (embed_compare.py).
+# Each embedder has its own column; the default comes from EMBEDDER so the
+# whole pipeline switches with one knob, and it goes into the run fingerprint.
+EMBEDDERS = {
+    "bge-m3": {"column": "embedding", "dim": 1024},
+    "ruri-v3-310m": {"column": "embedding_ruri", "dim": 768,
+                     "hf": "cl-nagoya/ruri-v3-310m",
+                     "revision": "18b60fb8c2b9df296fb4212bb7d23ef94e579cd3",
+                     # documents were encoded with "検索文書: " (embed_ruri.py)
+                     "query_prefix": "検索クエリ: "},
+}
+# Default since phase 7 (sweep.py --ruri): full pipeline r@5 0.94 without
+# query expansion vs 0.86 for BGE-M3 with it. EMBEDDER=bge-m3 switches back.
+EMBEDDER = os.environ.get("EMBEDDER", "ruri-v3-310m")
+_st = {}             # in-process models, loaded once per process
+
+
+def _st_model(name):
+    if name not in _st:
+        from sentence_transformers import SentenceTransformer
+        cfg = EMBEDDERS[name]
+        print(f"загрузка {cfg['hf']}...", file=sys.stderr)
+        _st[name] = SentenceTransformer(cfg["hf"], device="cpu",
+                                        revision=cfg["revision"])
+    return _st[name]
+
 RRF_K = 60
 POOL = 50          # how many we take from each method before fusion
 
@@ -66,20 +94,41 @@ POOL = 50          # how many we take from each method before fusion
 #   ef_search=100            -> 第39条 in 6th place (= exact numpy scan)
 #   ef_search=400            -> the same, no further gain
 # The default drops results SILENTLY — no error, no warning.
-EF_SEARCH = 100
+#
+# Phase 7, Ruri v3 (embed_ruri.py check, golden queries, core, top-20 overlap
+# with the exact scan):  ef 40 -> 0.914 (worst 0.25) · 100 -> 0.973 (worst
+# 0.75) · 200 -> 0.998 · 400 -> 0.999. The value tuned on BGE-M3 loses 3% of
+# Ruri's pool, up to a quarter on one question: a different model is a
+# different geometry. 200 for both columns — for BGE-M3 a higher ef only
+# costs latency, it cannot reduce recall.
+EF_SEARCH = 200
 
 FIELDS = ("id, chunk_id, text, law_id, law_title, law_type, core, "
           "article_title, article_caption, paragraph_num")
 
 
 class Hybrid:
-    def __init__(self):
-        self.conn = psycopg.connect(DSN)
+    def __init__(self, embedder=None):
+        self.embedder = embedder or EMBEDDER
+        if self.embedder not in EMBEDDERS:
+            raise ValueError(f"unknown embedder: {self.embedder}")
+        self.column = EMBEDDERS[self.embedder]["column"]
+        # autocommit: this class only reads. Without it every SELECT opened a
+        # transaction that stayed open for the life of the process (uvicorn,
+        # the agent, the MCP server) — holding a lock that made ALTER TABLE
+        # in embed_ruri.py wait forever, and leaving "unexpected EOF on
+        # client connection with an open transaction" in the Postgres log.
+        self.conn = psycopg.connect(DSN, autocommit=True)
         register_vector(self.conn)
         self.conn.execute(f"SET hnsw.ef_search = {EF_SEARCH}")
         self.http = httpx.Client()
 
     def embed(self, text):
+        if self.embedder != "bge-m3":
+            cfg = EMBEDDERS[self.embedder]
+            return _st_model(self.embedder).encode(
+                cfg["query_prefix"] + text, normalize_embeddings=True,
+                show_progress_bar=False).astype(np.float32)
         r = self.http.post(OLLAMA, json={"model": MODEL, "input": text},
                            timeout=60)
         r.raise_for_status()
@@ -90,10 +139,11 @@ class Hybrid:
         so ASC returns the most similar first."""
         q = self.embed(query)
         where = "WHERE core" if core_only else ""
+        col = self.column          # from EMBEDDERS, never from input
         sql = f"""
-            SELECT {FIELDS}, (embedding <#> %s) * -1 AS score
+            SELECT {FIELDS}, ({col} <#> %s) * -1 AS score
             FROM chunks {where}
-            ORDER BY embedding <#> %s
+            ORDER BY {col} <#> %s
             LIMIT %s
         """
         return self._rows(sql, (q, q, limit))

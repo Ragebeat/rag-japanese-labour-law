@@ -100,6 +100,9 @@ async def lifespan(app):
     # DB connection and cross-encoder: once per process.
     state["rr"] = Reranked()
     rerank._get()          # warm-up: otherwise the first request pays 15 seconds
+    import hybrid
+    if hybrid.EMBEDDER != "bge-m3":   # in-process embedder: warm it up too
+        hybrid._st_model(hybrid.EMBEDDER)
     state["http"] = httpx.AsyncClient(timeout=300)
     state["line"] = Line()
     yield
