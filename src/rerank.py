@@ -19,7 +19,9 @@ again, it rearranges what was already found. r@1, r@3 and MRR go up.
 """
 
 import pathlib
+import re
 import sys
+import unicodedata
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from hybrid import Hybrid  # noqa: E402
@@ -36,6 +38,17 @@ REVISION = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
 POOL = 20          # how many candidates to hand to the reranker
 
 _model = None
+
+
+_HALFWIDTH = re.compile("[\uff61-\uff9f]+")
+
+
+def fold_query(text):
+    """Half-width kana -> full-width (ﾊﾟﾜﾊﾗ -> パワハラ), strip. Nothing else: NFKC on the whole
+    query would also turn ？ （） into ASCII, drifting away from the corpus form.
+    Full-width digits/latin (３６協定) were measured in perturb_test.py: no loss."""
+    return _HALFWIDTH.sub(lambda m: unicodedata.normalize("NFKC", m.group()),
+                          text).strip()
 
 
 def _get():
@@ -64,6 +77,7 @@ class Reranked:
         better on the original question, with the added terms acting as noise.
         But that is a hypothesis — we measure both.
         """
+        query = fold_query(query)
         # Two spans split retrieval in two: candidates (query expansion,
         # embedding via Ollama, Postgres) and the cross-encoder on the CPU.
         with tracing.span("candidates", "RETRIEVER", input=query,
