@@ -20,7 +20,7 @@ Built as a portfolio project, but with production-grade measurement discipline: 
 | + cross-encoder reranking | **0.600** | **0.860** | **0.720** | 15.2 |
 | + article-level context assembly | 0.600 | **0.880** | 0.720 | 15.2 |
 
-**recall@5: 0.68 → 0.88. MRR: 0.495 → 0.720.**
+**BGE-M3 pipeline: recall@5 0.68 → 0.88, MRR 0.495 → 0.720. Adopted configuration (Ruri-v3 + reranker): recall@5 0.94** — see below.
 
 ### Swapping the embedder: BGE-M3 → Ruri-v3
 
@@ -47,6 +47,10 @@ Bare Ruri equals the whole tuned BGE-M3 pipeline. The configuration adopted is R
 
 Generation, same prompt, BGE-M3 → Ruri: context recall 0.88 → 0.94, claim coverage by verbatim quotes 0.57 → 0.64, text matching the source 0.62 → 0.68, paragraph-label errors 3 → 0.
 
+### Verbatim quotes, checked by code
+
+A correct article with a wrong detail is the failure that citation markers do not catch. The generator is required to quote the statute verbatim in 「…」, and code checks every quote against the cited chunk and the cited paragraph (項). Against the base prompt: claim coverage by verified quotes **0.09 → 0.68**, answers with numbers outside quotes 22 → 11, refusals unchanged. The check also caught the first case of "real text under the wrong marker" automatically.
+
 On the generation side (BGE-M3 runs): the citation contract holds in 50 out of 50 answers, and there are 0 citations to articles absent from the context. The Ruri runs are not at that level yet: see Caveats.
 
 ---
@@ -69,15 +73,18 @@ The interface is available in Japanese and Russian. Questions are always Japanes
 
 ```
 question
-  ↓ query expansion: term dictionary → LLM as fallback
-  ↓ vector search (BGE-M3 + pgvector, HNSW)        top-20
+  ↓ vector search (Ruri-v3-310m in-process + pgvector HNSW, ef_search 200)  top-20
   ↓ cross-encoder reranking (bge-reranker-v2-m3)   top-20 → top-5 articles
   ↓ context assembly: each article in full
-  ↓ generation under a citation contract (gemma4:e4b)
+  ↓ term hint: colloquial → statutory pairs after the question 【用語の対応】
+  ↓ generation under a citation contract with verbatim quotes (gemma4:e4b)
+  ↓ output guard: links checked against an allow-list, also mid-stream
 answer + [N] markers + an explicit "can / cannot answer" verdict
 ```
 
-Everything runs locally: Ollama, Postgres in Docker, a GTX 1060 6GB.
+The earlier pipeline (BGE-M3 + query expansion: term dictionary, LLM as fallback) is still reproducible: `EMBEDDER=bge-m3` and the configurations in `sweep.py`.
+
+Everything runs locally: Ollama, Postgres in Docker, a GTX 1060 6GB; Ruri and the reranker run on CPU.
 
 ### Corpus
 
@@ -111,7 +118,7 @@ Postgres 17 + pgvector 0.8.6 in Docker. Vector and full-text indexes live in one
 
 Japanese full-text search runs on **Sudachi outside the database**: text is tokenised and stored space-separated, because the built-in `to_tsvector` would turn an entire Japanese article into a single token.
 
-**HNSW loses results silently.** After migrating from numpy to pgvector, the correct article disappeared from the top 10. The cause was the default `hnsw.ef_search = 40`; at 100 the ranking matched exact search again. The index does not fail or warn — it simply returns a list without the right answer.
+**HNSW loses results silently.** After migrating from numpy to pgvector, the correct article disappeared from the top 10. The cause was the default `hnsw.ef_search = 40`; at 100 the ranking matched exact search again. The index does not fail or warn — it simply returns a list without the right answer. (100 was enough for BGE-M3; after the switch to Ruri it is 200 — see below.)
 
 ### Japanese-specific problems
 
@@ -124,6 +131,20 @@ A layer of issues that does not exist in English corpora:
 - **Colloquial wording is not statutory wording.** 失業保険 does not occur in the Employment Insurance Act; the article says 基本手当. Retrieval put the article first, yet the generator refused on that same context 9 times out of 10; the question rewritten as 基本手当 gave 0 refusals out of 10. A general prompt rule fixed it at a price (see *What did not work*). What worked was showing the generator the colloquial → statutory pairs the search dictionary already holds, as a `【用語の対応】` line after the question
 - **Width variants of the query.** Measured on perturbed copies of the 50 questions: full-width digits and Latin (３６協定) cost nothing, the embedder handles them; half-width kana (ﾊﾟﾜﾊﾗ) lost 2 of the 11 questions it touched; a trailing space lost 1. `fold_query()` converts half-width kana and strips the query. Full NFKC was rejected: it also turns ？ and （） into ASCII, away from the form used in the corpus. Old/new kanji forms were not measured
 - **Index parameters belong to the model.** Overlap of the HNSW top-20 with exact search on Ruri: `ef_search` 40 → 0.914, 100 → 0.973, 200 → 0.998. A value tuned on another model silently loses part of the candidate pool; 200 is used
+
+### The term hint, and how to extend the dictionary
+
+The generator sees the question as typed, so a colloquial word that the statute never uses (失業保険 for 基本手当) can make it refuse even when retrieval put the right article first. `term_hint()` in `generate.py` looks the question up in `data/synonyms.json` (27 hand-written colloquial → statutory pairs) and appends the first statutory term of every key found as one line after the question: `【用語の対応】失業保険＝基本手当`. Matching is a plain substring test: no LLM, no extra latency. Retrieval does not use the dictionary (vector mode, expansion off); it only informs the generator.
+
+Measured effect, three runs against three controls: one over-refusal removed (#22: 9 refusals in 10 → 0 in 10), six questions better in every run, four worse in every run (#16, #36, #39, #40; #39 is a metric artefact).
+
+To extend it:
+
+1. Add a pair only after checking that the statutory term occurs in the corpus text (`toc.py`).
+2. One term per key. A longer list pulls the model toward neighbouring articles, the same dilution seen in search.
+3. Short keys also match inside longer words. Check each new key against every question it will touch (e.g. 組合 inside 健康保険組合).
+4. Compare three `--eval` runs with the previous configuration, never one: coverage, over-refusal, refusal at a miss and the per-question regression list. A loss repeated in every run belongs to the dictionary.
+5. Test new entries on questions that are not in the golden set. The current gain is measured on the vocabulary the dictionary was written next to, and is optimistic.
 
 ---
 
@@ -215,6 +236,27 @@ This also explains why combining the model verdict with the score threshold beat
 
 ---
 
+## Security and operations
+
+Reviewed against the OWASP Top 10 for LLM Applications (2026 edition).
+
+### Indirect prompt injection, measured
+
+A poisoned document was placed in the context with an instruction to append a link to every answer. Defences in the prompt (marking documents as data, delimiter tags, escaping) only lower the odds: the model followed the instruction in **4–8 of 8** questions under every prompt defence, and one sentence of stronger wording beat delimiting and escaping **8 of 8**. A code check on the output held **32 of 32**.
+
+> **For a class of harm that can be checked mechanically, the defence belongs in code, not in a request to the model.**
+
+The check is an allow-list of domains (e-Gov, MHLW), not "is the link in the sources" — a poisoned source contains it. Bare domains and e-mail addresses count. In streaming, a link is held back until it is complete and checked, so half of one never reaches the client. Links are only one kind of harm; the allow-list does not catch a phone number or a changed meaning, which is why the corpus itself is restricted to one trusted source.
+
+### Operations
+
+- **Traces without content by default.** Every step is traced (Phoenix + OpenTelemetry), but questions, prompts, answers and tool arguments are masked unless `TRACE_CONTENT=1`; the length survives. Every latency finding in this project came from metadata alone, and full traces would otherwise be a store of user questions and agent memory. Exceptions are recorded by type only. Phoenix binds to localhost
+- **API.** No CORS middleware (it was `*`, and nothing needed it: dev goes through the Vite proxy, the built UI is same-origin). One request at a time with a bounded FIFO queue — the client sees its position over SSE, 429 only when the queue is full. Retrieval runs off the event loop; if a client leaves mid-rerank, the slot is held until the thread finishes. Errors go out as codes, details to the log
+- **Agent memory** (`agent_graph.py`) is isolated per `user_id`, a required parameter, validated because it becomes a file name; a thread records its owner and is checked before its history is read
+- **Pinned versions**: reranker and Ruri by Hugging Face commit (the reranker's is part of the run fingerprint), Phoenix by image digest
+
+---
+
 ## Evaluation
 
 ### Golden dataset
@@ -227,7 +269,7 @@ recall@k counts as a hit if **at least one** relevant article appears in the top
 
 - **citation contract** — an `[N]` marker per chunk plus a `判定: 回答可能 / 回答不可` verdict on the first line. Held 50/50
 - **citation validity** — 1.000, zero fabricated references. This metric serves as a regression guard, not a quality indicator: the model can only cite what it can see
-- **false refusal** — 0 of 44 in the working configuration
+- **false refusal** — 0 of 44 on the BGE-M3 pipeline; 1 of 47 on Ruri (#24, the false-premise question described in *What did not work*)
 - **manual annotation of 20 answers** across three independent flags: substantive answer / distortion of content / extraneous material
 
 ### One technique that worked three times
@@ -246,14 +288,14 @@ Each time this replaced a heuristic with an exact match.
 
 Read these before using the numbers.
 
-- **`recall@5 = 0.88` (the BGE-M3 pipeline) is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began
+- **`recall@5 = 0.88` (the BGE-M3 pipeline) is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began — which is also why Ruri's 0.94 is close to what this golden set can show at all
 - **The manual annotation of 20 answers was produced by a model** (Claude, via an agent), not a human. It is a second opinion with access to the primary source, not a human gold standard
 - **Two of the four judges are cloud-hosted** (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`). The rest of the system is fully local
 - **All generation numbers were obtained with `gemma4:e4b`.** Changing the generator makes them incomparable
 - **The golden set is 50 questions.** A difference below 0.02 on this sample is noise and is not grounds for choosing a configuration
 - **Generation is not deterministic even at temperature 0.** On one fixed context the same question gave 1 refusal in 3 runs in one session and 9 in 10 in another; claim coverage of one configuration moves by 0.04–0.08 between identical runs. Configurations here are compared over three runs, with control reruns of the baseline
 - **The query-expansion dictionary and the generator's term hint are one file** (`data/synonyms.json`, 27 pairs). Ten of its keys never occur in the golden questions, but 25 of the 50 questions contain one, and a check on fresh questions was not done. The gain on this set is optimistic
-- **Citation validity on the Ruri runs is below 1.000**: 0.980 in the last run of the adopted configuration (0.985 in the earlier prompt-rule experiment), i.e. 3 invented article references across 50 answers in the last run. The 50/50 figure above is from the BGE-M3 runs
+- **Citation validity on the Ruri runs is below 1.000**: 2 invented article references across 50 answers in the adopted configuration, the same two in all three runs (#3, #20). Both are a garbled article number in running text ("第十六十六条" for 第六十六条); the label after the `[N]` marker is correct. A prompt line telling the model to copy the article number as written in the heading removed a third one, a wrong label (#36). The 50/50 figure above is from the BGE-M3 runs
 
 ---
 
@@ -277,8 +319,16 @@ uv run python src/fetch_manifest.py           # statute list from e-Gov
 uv run python src/download_laws.py            # statute bodies (XML)
 uv run python src/analyze.py                  # corpus statistics
 uv run python src/chunk.py                    # chunking
-uv run python src/embed.py                    # embeddings (~25 min)
+uv run python src/embed.py                    # BGE-M3 embeddings (~25 min)
 uv run python src/db_init.py                  # load + indexes
+
+# Ruri-v3 — the default embedder. Order matters: encode reuses the core
+# vectors cached by embed_compare. CPU, cached in data/emb/, resumable.
+uv run python src/embed_compare.py --only ruri   # core slice + model comparison
+uv run python src/embed_ruri.py encode        # the rest of the corpus
+uv run python src/embed_ruri.py load          # column embedding_ruri + HNSW
+uv run python src/embed_ruri.py check         # HNSW vs exact search per ef_search
+# db_init.py schema drops the table: after a rebuild run `embed_ruri.py load` again
 
 uv run python src/generate.py "有給って入社してすぐもらえるの？"
 uv run python src/generate.py --eval          # golden-set run
@@ -299,4 +349,28 @@ Environment variables: `GEN_MODEL`, `JUDGE_MODEL`, Postgres credentials — all 
 
 ## Stack
 
-Python 3.14 · Postgres 17 + pgvector · Ollama (BGE-M3, gemma4:e4b) · sentence-transformers (bge-reranker-v2-m3) · SudachiPy · FastAPI + SSE · React + Vite · httpx · numpy
+Python 3.14 · Postgres 17 + pgvector · Ollama (gemma4:e4b; BGE-M3 for the earlier pipeline) · sentence-transformers (ruri-v3-310m, bge-reranker-v2-m3) · SudachiPy · FastAPI + SSE · React + Vite · Phoenix + OpenTelemetry · httpx · numpy
+
+---
+
+## Extension: the RAG as a tool for an agent
+
+The same retrieval, wrapped as a tool, for questions that span several institutions (「育休中に残業させられる？」 touches both parental leave and working hours). Three forms, built in this order to see what each layer adds.
+
+**`agent.py` — a bare ReAct loop, no framework.** The model decides what to search for and when it has enough; the code decides when to stop. Budgets on iterations, tokens, context growth and wall time, plus a loop detector that measures progress rather than repetition: a search round that brings no new articles counts as a stall, and several in a row stop the loop. A forced final turn when a budget runs out, and a deterministic fallback when the model is unavailable. Tool errors go back to the model as messages it can act on, not as exceptions. The tool searches the core first and widens to the full corpus when the reranker score is low. `test_agent.py` tests the loop detector and the budget as plain code on hand-made inputs — the live 4B model refused or answered before it ever looped, and provoking it into a loop to test a set comparison would be the wrong way round.
+
+**`agent_graph.py` — the same agent as a LangGraph state graph.** The `if`s inside the loop become named nodes and edges, which buys three things the loop did not have:
+- **a thread**: follow-up questions in one conversation share state, and old tool output is compacted — conclusions and the article registry stay, raw text goes, so a second question still fits the context
+- **human in the loop**: when retrieval is weak, the graph pauses with `interrupt()` and asks the user to clarify
+- **long-term memory with confirmation**: facts about the user that change the legal answer (prefecture, form of employment, company size) are extracted from what the user said, checked against closed sets, verified to be stated rather than inferred, and saved only after a yes. Memory goes into the system prompt, so anything written there is an injection that survives restarts — hence the closed sets and the confirmation. Isolated per `user_id`; facts older than 90 days are marked for re-confirmation. `test_memory.py`
+
+**`mcp_server.py` — the tool over MCP.** Registered in Claude Desktop, so a different model with a different loop can use the same retrieval. The trade-off is explicit: an MCP client runs its own loop and gets none of the budgets above, and the text the tool returns lands in a client that may hold other tools with real permissions — protection on that side belongs to the client.
+
+```bash
+uv run python src/agent.py "育休中に残業させられる？"
+uv run python src/agent_graph.py              # interactive; /mem shows memory, /forget clears it
+uv run python src/test_agent.py
+uv run python src/test_memory.py
+```
+
+⚠️ The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
