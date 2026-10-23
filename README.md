@@ -8,7 +8,7 @@ A retrieval-and-answer system over the corpus of Japanese labour legislation. It
 
 Built as a portfolio project, but with production-grade measurement discipline: **every improvement is backed by a number on a golden dataset, and every rejected design was rejected on evidence rather than taste.**
 
-**Contents:** [Results](#results) · [Interface](#interface) · [Architecture](#architecture) · [What did not work](#what-did-not-work) · [Refusal when the source is absent](#refusal-when-the-source-is-absent) · [Security and operations](#security-and-operations) · [Evaluation](#evaluation) · [Caveats](#caveats) · [Open problems](#open-problems) · [Where the numbers come from](#where-the-numbers-come-from) · [Running it](#running-it) · [Repository layout](#repository-layout) · [Stack](#stack) · [Extension: the RAG as a tool for an agent](#extension-the-rag-as-a-tool-for-an-agent) · [License](#license)
+**Contents:** [Results](#results) · [Interface](#interface) · [Architecture](#architecture) · [What did not work](#what-did-not-work) · [Refusal when the source is absent](#refusal-when-the-source-is-absent) · [Security and operations](#security-and-operations) · [Evaluation](#evaluation) · [Caveats](#caveats) · [Open problems](#open-problems) · [Where the numbers come from](#where-the-numbers-come-from) · [Running it](#running-it) · [Repository layout](#repository-layout) · [Stack](#stack) · [Extension: the RAG as a tool for an agent](#extension-the-rag-as-a-tool-for-an-agent) · [Related projects](#related-projects) · [License](#license)
 
 ---
 
@@ -470,6 +470,13 @@ uv run python src/test_memory.py
 ```
 
 ⚠️ The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
+
+---
+
+## Related projects
+
+- [dental-agent](https://github.com/Ragebeat/dental-agent) — LangGraph booking agent with its own MCP server; the outcome is scored by the database state, not by an LLM judge.
+- [FormulaFix](https://github.com/Ragebeat/formulafix-llm-eval) — Excel/Sheets formula diagnosis; model comparison with noise control and a hand-audited LLM judge.
 
 ---
 
