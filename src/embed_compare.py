@@ -64,6 +64,12 @@ MODELS = {
 BASELINE = "bge-m3 (ollama)"
 
 
+
+def _dim(model):
+    """Embedding size; sentence-transformers renamed the method (get_sentence_embedding_dimension is deprecated)."""
+    get = getattr(model, "get_embedding_dimension", None) or model.get_sentence_embedding_dimension
+    return get()
+
 def load_golden():
     return [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
 
@@ -87,7 +93,7 @@ def encode_docs(model, key, texts, prefix):
     """Core chunks -> normalised vectors, cached and resumable."""
     EMB_DIR.mkdir(parents=True, exist_ok=True)
     path, state = EMB_DIR / f"{key}.npy", EMB_DIR / f"{key}.state.json"
-    n, dim = len(texts), model.get_sentence_embedding_dimension()
+    n, dim = len(texts), _dim(model)
     done = 0
     if path.exists() and state.exists():
         st = json.loads(state.read_text(encoding="utf-8"))
