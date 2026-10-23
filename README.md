@@ -1,8 +1,14 @@
 # RAG over Japanese Labour Law
 
+*Languages: English · [Русский](README.ru.md) · [日本語](README.ja.md)*
+
+> **recall@5 0.94** on a frozen 50-question golden set · fully local (Ollama, Postgres + pgvector, a GTX 1060) · every rejected design was rejected with a number.
+
 A retrieval-and-answer system over the corpus of Japanese labour legislation. It answers colloquial questions (「有給って入社してすぐもらえるの？」 — "do I get paid leave right after joining?") with statutory provisions and precise source citations.
 
 Built as a portfolio project, but with production-grade measurement discipline: **every improvement is backed by a number on a golden dataset, and every rejected design was rejected on evidence rather than taste.**
+
+**Contents:** [Results](#results) · [Interface](#interface) · [Architecture](#architecture) · [What did not work](#what-did-not-work) · [Refusal when the source is absent](#refusal-when-the-source-is-absent) · [Security and operations](#security-and-operations) · [Evaluation](#evaluation) · [Caveats](#caveats) · [Open problems](#open-problems) · [Where the numbers come from](#where-the-numbers-come-from) · [Running it](#running-it) · [Stack](#stack) · [Extension: the RAG as a tool for an agent](#extension-the-rag-as-a-tool-for-an-agent) · [License](#license)
 
 ---
 
@@ -14,7 +20,7 @@ Built as a portfolio project, but with production-grade measurement discipline: 
 |---|---|---|---|---|
 | naive vector search | 0.380 | 0.680 | 0.495 | 0.28 |
 | BM25 alone | 0.200 | 0.320 | 0.257 | 0.011 |
-| hybrid BM25 + RRF | 0.320 | 0.600 | 0.439 | 0.31 |
+| hybrid BM25 + RRF | 0.320 | 0.500 | 0.414 | 0.33 |
 | + dictionary query expansion | 0.480 | 0.780 | 0.582 | 0.27 |
 | + LLM fallback to the dictionary | 0.480 | 0.820 | 0.604 | 0.28 |
 | + cross-encoder reranking | **0.600** | **0.860** | **0.720** | 15.2 |
@@ -45,11 +51,11 @@ Full pipeline:
 
 Bare Ruri equals the whole tuned BGE-M3 pipeline. The configuration adopted is Ruri + reranker **without** query expansion: the 0.02 that expansion adds is one question, and the dictionary is the one component developed against this golden set, so its gain on this set is optimistic. 0.94 is the figure without that bias.
 
-Generation, same prompt, BGE-M3 → Ruri: context recall 0.88 → 0.94, claim coverage by verbatim quotes 0.57 → 0.64, text matching the source 0.62 → 0.68, paragraph-label errors 3 → 0.
+Generation, same prompt, BGE-M3 → Ruri: context recall 0.88 → 0.94, claim coverage by verbatim quotes 0.57 → 0.64, text matching the source 0.62 → 0.68, paragraph-label errors 3 → 0. The adopted configuration adds one prompt line (copy the article number as written in the heading); on it, means of three runs: claim coverage 0.62, text matching the source 0.64, one paragraph-label error (#39, see Caveats).
 
 ### Verbatim quotes, checked by code
 
-A correct article with a wrong detail is the failure that citation markers do not catch. The generator is required to quote the statute verbatim in 「…」, and code checks every quote against the cited chunk and the cited paragraph (項). Against the base prompt: claim coverage by verified quotes **0.09 → 0.68**, answers with numbers outside quotes 22 → 11, refusals unchanged. The check also caught the first case of "real text under the wrong marker" automatically.
+A correct article with a wrong detail is the failure that citation markers do not catch. The generator is required to quote the statute verbatim in 「…」, and code checks every quote against the cited chunk and the cited paragraph (項). In the adopted configuration (mean of three runs) **0.62 of claims are covered by verified quotes**, and 0.64 of the answer text matches the source verbatim. The check also caught the first case of "real text under the wrong marker" automatically.
 
 On the generation side (BGE-M3 runs): the citation contract holds in 50 out of 50 answers, and there are 0 citations to articles absent from the context. The Ruri runs are not at that level yet: see Caveats.
 
@@ -270,6 +276,7 @@ recall@k counts as a hit if **at least one** relevant article appears in the top
 - **citation contract** — an `[N]` marker per chunk plus a `判定: 回答可能 / 回答不可` verdict on the first line. Held 50/50
 - **citation validity** — 1.000, zero fabricated references. This metric serves as a regression guard, not a quality indicator: the model can only cite what it can see
 - **false refusal** — 0 of 44 on the BGE-M3 pipeline; 1 of 47 on Ruri (#24, the false-premise question described in *What did not work*)
+- **context truncation** — none. Ollama silently trims a prompt that exceeds its default window; `check_ctx.py` found 0 of 50 prompts cut, and the window is now set explicitly (`num_ctx` 32768)
 - **manual annotation of 20 answers** across three independent flags: substantive answer / distortion of content / extraneous material
 
 ### One technique that worked three times
@@ -295,7 +302,8 @@ Read these before using the numbers.
 - **The golden set is 50 questions.** A difference below 0.02 on this sample is noise and is not grounds for choosing a configuration
 - **Generation is not deterministic even at temperature 0.** On one fixed context the same question gave 1 refusal in 3 runs in one session and 9 in 10 in another; claim coverage of one configuration moves by 0.04–0.08 between identical runs. Configurations here are compared over three runs, with control reruns of the baseline
 - **The query-expansion dictionary and the generator's term hint are one file** (`data/synonyms.json`, 27 pairs). Ten of its keys never occur in the golden questions, but 25 of the 50 questions contain one, and a check on fresh questions was not done. The gain on this set is optimistic
-- **Citation validity on the Ruri runs is below 1.000**: 2 invented article references across 50 answers in the adopted configuration, the same two in all three runs (#3, #20). Both are a garbled article number in running text ("第十六十六条" for 第六十六条); the label after the `[N]` marker is correct. A prompt line telling the model to copy the article number as written in the heading removed a third one, a wrong label (#36). The 50/50 figure above is from the BGE-M3 runs
+- **Citation validity on the Ruri runs is below 1.000**: 2 invented article references across 50 answers in the adopted configuration, the same two in all three runs (#3, #20). Both are garbled article numbers in running text (e.g. "第十六十六条" for 第六十六条); the label after the `[N]` marker is correct. A prompt line telling the model to copy the article number as written in the heading removed a third one, a wrong label (#36). The 50/50 figure above is from the BGE-M3 runs
+- **One paragraph-label error in the adopted configuration** (#39, in all three runs): a four-character quote 「休業給付」 is found in a neighbouring paragraph of the cited article. #39 is a retrieval miss, and the error is closer to a metric artefact than to a wrong citation
 
 ---
 
@@ -309,18 +317,48 @@ Read these before using the numbers.
 
 ---
 
+## Where the numbers come from
+
+Every figure above is backed by a script in `src/` and a result file in `data/`. The result files are committed: they are measurement records and cannot be regenerated without the full local setup.
+
+| Claim | Script | Result |
+|---|---|---|
+| Retrieval table (BGE-M3 rows); core vs full corpus, +0.08 | `eval.py` · `eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
+| Hybrid BM25: weight gradient; reranker pool size | `sweep.py` · `sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
+| Embedder comparison (bare vector search) | `embed_compare.py` | `embed_compare.json` |
+| Full pipeline on Ruri: 0.94, 0.96 | `sweep.py --ruri` | `sweep_ruri.json` |
+| HNSW `ef_search` overlap with exact search | `embed_ruri.py check` | console output |
+| Width variants of the query | `perturb_test.py` | console output |
+| Generation metrics, every prompt change (three runs each) | `generate.py --eval` · `compare.py` | `runs.jsonl` · `runs/` |
+| Context assembly: whole articles vs deduplicated chunks | `generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
+| Verbatim-quote check, re-scored on saved answers | `rescore_quotes.py` | `gen_report_quotes_*.json` |
+| Golden-set expansion (rejected) | `expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
+| Judges table; manual annotation of 20 answers | `verify.py --calibrate` · `make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
+| Structural completeness check | `verify.py --structural` | `omission_*.json` |
+| Refusal when the source is absent | `generate.py --ablate` · `score_gate.py` · `margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
+| Indirect prompt injection | `injection_test.py` · `injection_test.py --escape` | `injection.json` · `injection_escape.json` |
+| Context truncation: 0 of 50 prompts cut | `check_ctx.py` | `ctx_check.json` |
+
+Run fingerprints in `data/runs.jsonl`: `8b80e255` BGE-M3 with the quote prompt · `abda3d7e` Ruri, same prompt · `a47039ed` the rejected over-refusal rule · `cfa11f74` the term hint · `251a4dd9` the adopted configuration (term hint + copy article numbers as written). `compare.py` diffs any two of them question by question.
+
+---
+
 ## Running it
 
 ```bash
 docker compose up -d                          # Postgres + pgvector
 uv sync
 
-uv run python src/fetch_manifest.py           # statute list from e-Gov
-uv run python src/download_laws.py            # statute bodies (XML)
+# data/manifest.json is committed and pins each statute to a revision (law_revision_id).
+# fetch_manifest.py rebuilds it from today's e-Gov list: run it only to move to newer texts,
+# and expect the numbers in this README to shift.
+uv run python src/download_laws.py            # statute bodies (XML), the pinned revisions
 uv run python src/analyze.py                  # corpus statistics
 uv run python src/chunk.py                    # chunking
 uv run python src/embed.py                    # BGE-M3 embeddings (~25 min)
-uv run python src/db_init.py                  # load + indexes
+uv run python src/db_init.py schema           # table (drops it if it exists)
+uv run python src/db_init.py load             # chunks + BGE-M3 vectors
+uv run python src/db_init.py index            # indexes, after loading
 
 # Ruri-v3 — the default embedder. Order matters: encode reuses the core
 # vectors cached by embed_compare. CPU, cached in data/emb/, resumable.
@@ -334,6 +372,9 @@ uv run python src/generate.py "有給って入社してすぐもらえるの？"
 uv run python src/generate.py --eval          # golden-set run
 uv run python src/generate.py --ablate        # ablation
 uv run python src/verify.py --calibrate       # judge calibration
+uv run python src/compare.py                  # diff the last two runs
+uv run python src/test_quotes.py              # verbatim-quote check
+uv run python src/test_guard.py               # output link guard
 ```
 
 Web:
@@ -345,7 +386,7 @@ cd web && npm install && npm run dev          # UI on :5173
 cd web && npm run build                       # build; served by the same FastAPI
 ```
 
-Environment variables: `GEN_MODEL`, `JUDGE_MODEL`, Postgres credentials — all in `.env`.
+Environment variables: `GEN_MODEL`, `JUDGE_MODEL`, Postgres credentials — all in `.env`; start from the template: `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`).
 
 ## Stack
 
@@ -374,3 +415,9 @@ uv run python src/test_memory.py
 ```
 
 ⚠️ The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
+
+---
+
+## License
+
+Code: [MIT](LICENSE). Statute texts are fetched from e-Gov 法令検索 at build time and are not stored in this repository; Japanese statutes are not subject to copyright (著作権法 第13条).

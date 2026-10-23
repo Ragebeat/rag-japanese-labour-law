@@ -26,9 +26,8 @@ src/_diag*.py
 q.json
 toc_*.txt
 
-# Translation round-trip: the script is kept, its intermediate files are not
-tools/comments.json
-tools/comments.en.json
+# Local tooling (comment translation round-trip), not part of the project
+tools/
 
 # ─────────────────────────────────────────────────────────────
 # Data. Order matters: the LAST matching rule wins in git, so
