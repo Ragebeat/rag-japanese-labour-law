@@ -54,17 +54,17 @@ def resolve(arg, log):
         p = pathlib.Path(arg)
         return (p if p.is_absolute() else ROOT / p), None
     except IndexError:
-        sys.exit(f"в runs.jsonl нет прогона {arg} (всего {len(log)})")
+        sys.exit(f"no run {arg} in runs.jsonl ({len(log)} in total)")
 
 
 def describe(path, entry):
     if not entry:
-        return f"{path.name}  (не из журнала — конфигурация неизвестна)"
-    return f"{entry['ts']} · {entry['label']} · отпечаток {entry['fingerprint']} · {entry['git']}"
+        return f"{path.name}  (not from the log — configuration unknown)"
+    return f"{entry['ts']} · {entry['label']} · fingerprint {entry['fingerprint']} · {entry['git']}"
 
 
 def show_metrics(ma, mb):
-    print(f"\n{'метрика':<22} {'A':>8} {'B':>8}   Δ")
+    print(f"\n{'metric':<22} {'A':>8} {'B':>8}   Δ")
     for k, better in BETTER.items():
         a, b = ma.get(k), mb.get(k)
         if a is None and b is None:
@@ -105,25 +105,25 @@ def per_question(ra, rb):
             # A refusal is right on a retrieval miss and wrong on a hit.
             to_refusal = b["verdict"] == "no"
             (w if to_refusal == b["hit"] else g).append(
-                f"вердикт {a['verdict']} → {b['verdict']}"
-                f" ({'статья найдена' if b['hit'] else 'промах retrieval'})")
+                f"verdict {a['verdict']} → {b['verdict']}"
+                f" ({'article found' if b['hit'] else 'retrieval miss'})")
 
         ga, gb = set(a.get("cited", [])) & gold[i], set(b.get("cited", [])) & gold[i]
         if ga - gb:
-            w.append(f"потерян источник из golden: {', '.join(sorted(ga - gb))}")
+            w.append(f"lost a golden source: {', '.join(sorted(ga - gb))}")
         if gb - ga:
-            g.append(f"появился источник из golden: {', '.join(sorted(gb - ga))}")
+            g.append(f"gained a golden source: {', '.join(sorted(gb - ga))}")
 
         qa, qb = a.get("claims_quoted"), b.get("claims_quoted")
         if qa is not None and qb is not None:
             if qa > 0 and qb == 0:
-                w.append(f"пропали цитаты ({qa} → 0)")
+                w.append(f"quotes disappeared ({qa} → 0)")
             elif qa == 0 and qb > 0:
-                g.append(f"появились цитаты (0 → {qb})")
+                g.append(f"quotes appeared (0 → {qb})")
 
-        for key, label in (("quote_bad", "искажённая цитата"),
-                           ("para_bad", "цитата не в указанном 項"),
-                           ("bad_arts", "неверный номер статьи")):
+        for key, label in (("quote_bad", "distorted quote"),
+                           ("para_bad", "quote not in the cited 項"),
+                           ("bad_arts", "wrong article number")):
             na, nb = len(a.get(key, [])), len(b.get(key, []))
             if nb > na:
                 w.append(f"{label}: {na} → {nb}")
@@ -135,7 +135,7 @@ def per_question(ra, rb):
         if g:
             better.append((i, b["q"], g))
 
-    for title, items in (("Регрессии", worse), ("Улучшения", better)):
+    for title, items in (("Regressions", worse), ("Improvements", better)):
         print(f"\n── {title} ({len(items)}) ──")
         for i, q, notes in items:
             print(f"  #{i:<3} {q[:26]}")
@@ -150,13 +150,13 @@ def main():
         for k, e in enumerate(log):
             m = e["metrics"]
             print(f"{k:>3}  {e['ts']}  {e['label']:<7} {e['fingerprint']}  {e['git']!s:<14}"
-                  f" покрытие {m.get('claim_coverage')}  para_bad {m.get('para_bad')}"
+                  f" coverage {m.get('claim_coverage')}  para_bad {m.get('para_bad')}"
                   f"  over-refusal {m.get('over_refusal')}")
         return
 
     if not args:
         if len(log) < 2:
-            sys.exit("в runs.jsonl меньше двух прогонов — укажи отчёты путями")
+            sys.exit("fewer than two runs in runs.jsonl — pass report paths instead")
         args = ["-2", "-1"]
     if len(args) != 2:
         sys.exit(__doc__)
@@ -169,10 +169,10 @@ def main():
     print(f"A: {describe(pa, ea)}")
     print(f"B: {describe(pb, eb)}")
     if ea and eb and ea["fingerprint"] == eb["fingerprint"]:
-        print("⚠ одна конфигурация — вся разница ниже есть разброс между прогонами")
+        print("⚠ same configuration — every difference below is run-to-run variance")
     elif ea and eb:
         changed = [k for k in ea["config"] if ea["config"][k] != eb["config"].get(k)]
-        print(f"изменилось в конфигурации: {', '.join(changed)}")
+        print(f"configuration changed: {', '.join(changed)}")
 
     # Metrics are recomputed from the rows, not taken from the log: the same
     # definitions apply to a report that was never logged.

@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Прокси на бэкенд, чтобы в коде фронта пути были относительные (/ask).
-// Тогда сборка в web/dist работает под FastAPI без единой правки.
+// Proxy to the backend, so front-end code uses relative paths (/ask).
+// The build in web/dist then runs under FastAPI without a single change.
 export default defineConfig({
   plugins: [react()],
   server: {

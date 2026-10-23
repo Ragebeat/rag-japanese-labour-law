@@ -72,4 +72,4 @@ for name, fn in VARIANTS.items():
         if not base[x["id"]] and hit:
             gained.append(x["id"])
         print(f"  {name} #{x['id']:<3} {'hit ' if hit else 'miss'}", end="\r", flush=True)
-    print(f"{name:7s} вопросов изменено {len(changed):>2}   потеряно {lost}   появилось {gained}")
+    print(f"{name:7s} questions changed {len(changed):>2}   lost {lost}   gained {gained}")

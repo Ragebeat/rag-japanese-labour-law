@@ -76,24 +76,24 @@ def main():
     def stat(name, xs):
         if not xs:
             return
-        print(f"  {name:<28} n={len(xs):>2}  медиана {statistics.median(xs):+.3f}  "
-              f"мин {min(xs):+.3f}  макс {max(xs):+.3f}")
+        print(f"  {name:<28} n={len(xs):>2}  median {statistics.median(xs):+.3f}  "
+              f"min {min(xs):+.3f}  max {max(xs):+.3f}")
 
     print("\n── top-1 score ──")
-    stat("A: источник в контексте", A)
-    stat("B: источник удалён", B)
-    stat("C: промах retrieval", C)
+    stat("A: source in the context", A)
+    stat("B: source removed", B)
+    stat("C: retrieval miss", C)
 
-    print(f"\nAUC(A против B): {auc(A, B):.3f}   ← завышена: удаляли часто сам топ-1")
-    print(f"AUC(A против C): {auc(A, C):.3f}   ← честная, но n={len(C)}")
+    print(f"\nAUC(A vs B): {auc(A, B):.3f}   ← inflated: often the top-1 itself was removed")
+    print(f"AUC(A vs C): {auc(A, C):.3f}   ← honest, but n={len(C)}")
 
     # The threshold is set by an over-refusal budget, not by maximising separation.
     thr = q(A, 5)
-    print(f"\nпорог = 5-й перцентиль A = {thr:+.3f}  (то есть терпим 5% over-refusal)")
+    print(f"\nthreshold = 5th percentile of A = {thr:+.3f}  (i.e. 5% over-refusal tolerated)")
     for name, xs in (("A", A), ("B", B), ("C", C)):
         if xs:
             below = sum(1 for x in xs if x < thr)
-            print(f"  {name}: ниже порога {below}/{len(xs)} = {below / len(xs):.2f}")
+            print(f"  {name}: below the threshold {below}/{len(xs)} = {below / len(xs):.2f}")
 
     OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"→ {OUT}")

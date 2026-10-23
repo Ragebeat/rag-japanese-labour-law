@@ -35,9 +35,9 @@ def toc(law_key):
             seen.add(k)
             print(f"{k[1]}\t{k[2]}")
     if title is None:
-        print(f"не найдено: {law_key}")
+        print(f"not found: {law_key}")
     else:
-        print(f"\n— {title}, статей: {len(seen)}")
+        print(f"\n— {title}, articles: {len(seen)}")
 
 
 def article(law_key, art_title):
@@ -49,7 +49,7 @@ def article(law_key, art_title):
             print(c["text"][:400])
             print("-" * 60)
     if not found:
-        print(f"не найдено: {law_key} / {art_title}")
+        print(f"not found: {law_key} / {art_title}")
 
 
 def find(word, law_key=None):
@@ -63,7 +63,7 @@ def find(word, law_key=None):
                 seen.add(k)
                 print(f"{k[0][:24]:<24} {k[1]}\t{k[2]}")
     if not seen:
-        print(f"нигде не встречается: {word}")
+        print(f"occurs nowhere: {word}")
 
 
 if __name__ == "__main__":

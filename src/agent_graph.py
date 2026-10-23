@@ -1,10 +1,10 @@
-"""The same agent as agent.py, as a LangGraph state graph. Phase 5, sessions 2 and 4.
+"""The same agent as agent.py, as a LangGraph state graph.
 
 LangGraph describes an agent as a graph: nodes do the work, edges decide what
 runs next, and one state object travels through. agent.py already WAS such a
 graph — its transitions were `if`s inside a `while`. Here they have names.
 
-Session 2 — what the move to a graph forced:
+What the move to a graph forced:
 
 1. STATE IS DATA. A checkpointer saves the state after every node, so the
    budget and the loop detector live in plain dicts, loaded into the same
@@ -14,13 +14,13 @@ Session 2 — what the move to a graph forced:
 3. A NODE WITH interrupt() RUNS TWICE. On resume the node re-executes from the
    top. Nothing before interrupt() may have side effects — or cost much.
 
-Session 4 — memory, three kinds:
+Memory, three kinds:
 
 SHORT-TERM = the thread. Several questions in one conversation share the
 message history (thread_id). The system prompt is rebuilt every turn, so it
 always carries the current long-term facts.
 
-COMPACTION = keep conclusions, drop raw material (the session 1 rule). After
+COMPACTION = keep conclusions, drop raw material (the same rule as agent.py). After
 every answer the full article texts are stripped from old tool messages; the
 (law, article) registry and the answers stay. One round of two sub-questions
 was +9 000 tokens — without this, the second question would not fit.
@@ -75,7 +75,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MEMORY_DIR = ROOT / "data" / "memory"   # one file per user; in .gitignore: personal data
 STALE_DAYS = 90
 
-# Phase 6, OWASP review. The namespace used to be ("users", "local",
+# OWASP review. The namespace used to be ("users", "local",
 # "profile") with one file: harmless while the graph is a CLI for one
 # person, a cross-user leak the day it is put behind an API — user B would
 # get user A's facts in the system prompt. Now every memory function
@@ -207,7 +207,7 @@ EXTRACT = """ユーザーの発言から、本人が明言した事実だけを�
 - prefecture: 勤務地の都道府県"""
 
 # The schema allows null for every field — without a slot for "not said" the
-# model invents a value (phase 3).
+# model invents a value.
 EXTRACT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -319,7 +319,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         if trace:
             print(f"  {time.monotonic() - t_start:6.1f}s  {s}")
 
-    # ── nodes: the search loop (sessions 1–2) ───────────────────────────────
+    # ── nodes: the search loop ──────────────────────────────────────────────
 
     def model(s):
         b = load_budget(s.get("budget"))
@@ -329,12 +329,12 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         try:
             resp = chat(http, s["messages"])
         except Exception as e:                      # noqa: BLE001
-            log(f"✗ модель: {type(e).__name__}: {e}")
+            log(f"✗ model: {type(e).__name__}: {e}")
             return {"stop": "llm_error", "budget": dump_budget(b)}
         b.charge(resp)
         msg = resp["message"]
-        log(f"[model] #{b.iters} prompt={b.last_prompt} всего={b.tokens} "
-            f"вызовов={len(msg.get('tool_calls') or [])}")
+        log(f"[model] #{b.iters} prompt={b.last_prompt} total={b.tokens} "
+            f"calls={len(msg.get('tool_calls') or [])}")
         return {"messages": s["messages"] + [msg], "budget": dump_budget(b)}
 
     def tools(s):
@@ -371,7 +371,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
                 log(f"[tools] {r['query']!r} | {r['status']} top={top_s}"
                     f"{' widened' if r.get('widened') else ''}")
                 if e:
-                    log(f"        расширение ({e[0]}): {e[1]}")
+                    log(f"        expansion ({e[0]}): {e[1]}")
                 if r["status"] == "ok":
                     for a in r["articles"]:
                         if [a["law"], a["article"]] not in found:
@@ -387,7 +387,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
                 stop = "tool_error"
             elif p.update(keys, top) >= STALL_MAX:
                 stop = "loop"
-                log(f"        ⟲ {STALL_MAX} вызова без прогресса")
+                log(f"        ⟲ {STALL_MAX} calls without progress")
             if stop:
                 break
 
@@ -396,12 +396,12 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
                 "budget": dump_budget(b), "progress": dump_progress(p)}
 
     def nudge(s):
-        log("[nudge] ответ без поиска")
+        log("[nudge] answer without a search")
         return {"messages": s["messages"] + [{"role": "user", "content": NUDGE}],
                 "nudged": True}
 
     def reframe(s):
-        log("[reframe] weak — модель переформулирует сама")
+        log("[reframe] weak — the model rephrases by itself")
         text = REFRAME.format(qs="、".join(s["weak_qs"]))
         return {"messages": s["messages"] + [{"role": "user", "content": text}],
                 "reframed": True}
@@ -409,10 +409,10 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
     def ask_human(s):
         # Nothing above interrupt() may have side effects — see point 3.
         ans = interrupt({"kind": "ask", "weak": s["weak_qs"],
-                         "prompt": "Эти подвопросы не нашлись. Уточни другими "
-                                   "словами или что за ситуация (пусто — "
-                                   "прекратить поиск):"})
-        log(f"[ask_human] ответ: {ans!r}")
+                         "prompt": "Nothing found for these sub-questions. Rephrase, "
+                                   "or describe the situation (empty — "
+                                   "stop searching):"})
+        log(f"[ask_human] answer: {ans!r}")
         if not str(ans).strip():
             return {"reframed": True, "messages": s["messages"] + [{
                 "role": "user", "content": "追加情報はありません。見つからなかった"
@@ -425,7 +425,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
 
     def final(s):
         stop, found = s["stop"], s.get("found", [])
-        log(f"[final] стоп: {stop}")
+        log(f"[final] stop: {stop}")
         if stop == "llm_error":
             text = fallback(stop, found)
             return {"answer": text, "messages": s["messages"] + [
@@ -438,7 +438,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
             b.charge(resp, final=True)
             text = resp["message"].get("content", "").strip()
         except Exception as e:                      # noqa: BLE001
-            log(f"✗ финальный ход: {type(e).__name__}: {e}")
+            log(f"✗ final turn: {type(e).__name__}: {e}")
             text = fallback(stop, found)
         # The answer goes into the history (the FINAL instruction does not):
         # the next question in this thread must see what was said.
@@ -449,7 +449,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         return {"answer": s["messages"][-1].get("content", "").strip(),
                 "stop": "answered", "ungrounded": not s.get("called")}
 
-    # ── nodes: memory (session 4) ───────────────────────────────────────────
+    # ── nodes: memory ───────────────────────────────────────────────────────
 
     def compact(s):
         """Keep conclusions, drop raw material.
@@ -479,7 +479,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
             content = json.dumps(slim, ensure_ascii=False)
             after += len(content)
             msgs.append({**m, "content": content})
-        log(f"[compact] тулза в истории: {before} → {after} символов")
+        log(f"[compact] tool output in history: {before} → {after} chars")
         return {"messages": msgs}
 
     def propose(s):
@@ -490,7 +490,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         current = profile(store, user_id)
         new = {k: v for k, v in facts.items()
                if current.get(k, {}).get("value") != v}
-        log(f"[propose] извлечено и проверено: {facts} → новое: {new}")
+        log(f"[propose] extracted and checked: {facts} → new: {new}")
         return {"proposal": new or None}
 
     def confirm_memory(s):
@@ -501,9 +501,9 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
             for k, v in s["proposal"].items():
                 store.put(namespace(user_id), k, {"value": v, "stated_at": today})
             save_store(store, user_id)
-            log(f"[confirm_memory] сохранено: {s['proposal']}")
+            log(f"[confirm_memory] saved: {s['proposal']}")
         else:
-            log("[confirm_memory] отказ — ничего не сохранено")
+            log("[confirm_memory] declined — nothing saved")
         return {"proposal": None}
 
     # ── edges ────────────────────────────────────────────────────────────────
@@ -560,14 +560,14 @@ def show(values):
     b = values.get("budget") or {}
     # The output guard at the boundary where the answer reaches a person.
     answer, blocked = guard_links(values.get("answer", ""))
-    print("\n— ответ —")
+    print("\n— answer —")
     print(answer)
     if blocked:
-        print(f"⚠ ссылки вне белого списка вырезаны: {blocked}")
-    print(f"\n[стоп: {values.get('stop')}  итераций: {b.get('iters')}  "
-          f"токенов: {b.get('tokens')}  время: {b.get('spent', 0):.1f}s]")
+        print(f"⚠ links outside the allow-list removed: {blocked}")
+    print(f"\n[stop: {values.get('stop')}  iterations: {b.get('iters')}  "
+          f"tokens: {b.get('tokens')}  time: {b.get('spent', 0):.1f}s]")
     if values.get("ungrounded"):
-        print("⚠ ответ без единого поиска")
+        print("⚠ answered without a single search")
 
 
 def run_turn(graph, thread, q, store, user_id):
@@ -601,10 +601,10 @@ def _run_turn(graph, thread, q, store, user_id):
             if not shown:
                 show(st.values)       # the answer first, the memory question after
                 shown = True
-            print("\n💾 Запомнить на будущее (только то, что ты сам сказал):")
+            print("\n💾 Remember for next time (only what you said yourself):")
             for k, v in p["proposal"].items():
                 print(f"   · {LABELS[k]}: {v}")
-            out = graph.invoke(Command(resume=input("  сохранить? (y/n) > ")), config)
+            out = graph.invoke(Command(resume=input("  save? (y/n) > ")), config)
         else:
             print(f"\n⏸ {p['prompt']}")
             for w in p["weak"]:
@@ -624,7 +624,7 @@ def main():
     trace, hitl = "--trace" in args, "--hitl" in args
     first = " ".join(a for a in args if not a.startswith("--"))
 
-    print(f"порог (5-й перцентиль, score_gate.json): {THRESHOLD:.3f}")
+    print(f"threshold (5th percentile, score_gate.json): {THRESHOLD:.3f}")
     tracing.setup()
     tool = Tool()
     # The CLI's authentication is the OS session: whoever runs it is the
@@ -632,9 +632,9 @@ def main():
     user_id = "local"
     store = load_store(user_id)
     prof = profile(store, user_id)
-    print(f"долгая память: {json.dumps(prof, ensure_ascii=False) if prof else 'пусто'}")
-    print("команды: /new — новый разговор · /mem — что помню · "
-          "/forget — забыть всё · /quit")
+    print(f"long-term memory: {json.dumps(prof, ensure_ascii=False) if prof else 'empty'}")
+    print("commands: /new — new conversation · /mem — what I remember · "
+          "/forget — forget everything · /quit")
 
     thread = str(uuid.uuid4())
     with httpx.Client() as http:
@@ -649,17 +649,17 @@ def main():
                 break
             if q == "/new":
                 thread = str(uuid.uuid4())
-                print("— новый разговор: короткая память пуста, долгая осталась")
+                print("— new conversation: short-term memory cleared, long-term kept")
                 continue
             if q == "/mem":
                 prof = profile(store, user_id)
-                print(json.dumps(prof, ensure_ascii=False, indent=2) if prof else "пусто")
+                print(json.dumps(prof, ensure_ascii=False, indent=2) if prof else "empty")
                 continue
             if q == "/forget":
                 for k in list(profile(store, user_id)):
                     store.delete(namespace(user_id), k)
                 save_store(store, user_id)
-                print("— долгая память удалена (строки стёрты из файла)")
+                print("— long-term memory deleted (lines removed from the file)")
                 continue
             run_turn(graph, thread, q, store, user_id)
 

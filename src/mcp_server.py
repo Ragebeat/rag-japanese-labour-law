@@ -1,4 +1,4 @@
-"""labor_laws_rag as an MCP server. Phase 5, session 3.
+"""labor_laws_rag as an MCP server.
 
 MCP (Model Context Protocol) is a standard way to expose tools to any LLM
 client: Claude Desktop, Claude Code, Cursor, or our own agent. The tool is
@@ -14,7 +14,7 @@ What travels with the tool and what does not — the main point of this file:
   nudge to search, the reframe nudge, the final turn. A client like Claude
   Desktop runs ITS OWN loop and gets none of these.
 
-This is session 1's rule seen from the other side: whatever was put into the
+This is agent.py's rule seen from the other side: whatever was put into the
 tool as code became portable; whatever lived in the loop did not.
 
   uv run mcp dev src/mcp_server.py     # MCP Inspector in the browser

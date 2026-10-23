@@ -51,13 +51,13 @@ def main():
             }
         )
 
-    assert len(records) == total, f"собрано {len(records)}, ожидалось {total}"
+    assert len(records) == total, f"collected {len(records)}, expected {total}"
     ids = [r["law_id"] for r in records]
-    assert len(ids) == len(set(ids)), "дубли law_id"
+    assert len(ids) == len(set(ids)), "duplicate law_id"
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"манифест: {len(records)} записей → {OUT}")
+    print(f"manifest: {len(records)} records → {OUT}")
 
 
 if __name__ == "__main__":

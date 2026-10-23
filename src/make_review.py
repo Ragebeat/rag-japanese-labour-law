@@ -38,21 +38,21 @@ OUT = ROOT / "data" / "manual_review.md"
 N = 20
 STEP = 2
 
-HEAD = """# Ручная разметка ответов — эталон для судьи
+HEAD = """# Manual annotation of answers — the reference for the judge
 
-Заполнить каждую строку `grade:`, заменив `?`. Ничего больше не трогать —
-файл разбирается регексом.
+Fill in every `grade:` line, replacing `?`. Touch nothing else —
+the file is parsed with a regex.
 
-- **substance** = `full` (ответил на вопрос) · `partial` (по теме, но мимо сути)
-  · `none` (не ответил)
-- **distortion** = `yes` / `no` — искажено ли содержание нормы: неверный срок,
-  сумма, обязанность подана как рекомендация, норма распространена не на тех
-- **extra** = `yes` / `no` — притащено ли постороннее из мусорных чанков
+- **substance** = `full` (answers the question) · `partial` (on topic, misses the point)
+  · `none` (does not answer)
+- **distortion** = `yes` / `no` — is the rule distorted: a wrong period or
+  amount, a duty presented as a recommendation, a rule applied to the wrong people
+- **extra** = `yes` / `no` — is unrelated material pulled in from noise chunks
 
-Оценивать **ответ против вопроса**, а не против golden. Golden узок
-(занятие 7), и ответ по 施行規則 может быть верным.
+Judge **the answer against the question**, not against golden. Golden is
+narrow, and an answer from a 施行規則 can be correct.
 
-Если сомневаешься между `full` и `partial` — ставь `partial`.
+If unsure between `full` and `partial`, choose `partial`.
 
 ---
 
@@ -61,34 +61,34 @@ HEAD = """# Ручная разметка ответов — эталон для
 
 def main():
     if not REPORT.exists():
-        sys.exit(f"нет {REPORT.name} — сначала generate.py --eval")
+        sys.exit(f"no {REPORT.name} — run generate.py --eval first")
     if OUT.exists() and "--force" not in sys.argv:
-        sys.exit(f"{OUT.name} уже есть — в нём разметка, перезапись её сотрёт.\n"
-                 f"Посмотреть: --parse · пересобрать с нуля: --force")
+        sys.exit(f"{OUT.name} already exists and holds annotation; overwriting would erase it.\n"
+                 f"View: --parse · rebuild from scratch: --force")
 
     rows = [r for r in json.loads(REPORT.read_text(encoding="utf-8")) if r["hit"]]
     rows.sort(key=lambda r: r["id"])
     picked = rows[::STEP][:N]
 
     if len(picked) < N:
-        print(f"⚠️ доступно только {len(picked)} вопросов при шаге {STEP}")
+        print(f"⚠️ only {len(picked)} questions available at step {STEP}")
 
     parts = [HEAD]
     for r in picked:
         parts.append(f"## #{r['id']}  {r['q']}\n")
-        parts.append("**Контекст:**\n")
+        parts.append("**Context:**\n")
         for i, c in enumerate(r["context"], 1):
             parts.append(f"{i}. `{c}`")
-        parts.append("\n**Ответ:**\n")
+        parts.append("\n**Answer:**\n")
         parts.append("> " + r["answer"].replace("\n", "\n> "))
         parts.append("")
         parts.append("`grade: substance=?  distortion=?  extra=?`")
         parts.append("")
-        parts.append("заметка:")
+        parts.append("note:")
         parts.append("\n---\n")
 
     OUT.write_text("\n".join(parts), encoding="utf-8")
-    print(f"вопросов в бланке: {len(picked)}  (id: "
+    print(f"questions in the form: {len(picked)}  (id: "
           f"{', '.join(str(r['id']) for r in picked)})")
     print(f"→ {OUT}")
 
@@ -110,7 +110,7 @@ def parse():
 if __name__ == "__main__":
     if "--parse" in sys.argv:
         g = parse()
-        print(f"заполнено: {len(g)}")
+        print(f"filled in: {len(g)}")
         for k, v in sorted(g.items()):
             print(f"  #{k}: {v}")
     else:

@@ -20,18 +20,12 @@ import psycopg
 from pgvector.psycopg import register_vector
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from env import DSN  # noqa: E402  (loads .env)
 from tokenize_ja import to_tsvector_text  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHUNKS = ROOT / "data" / "chunks.jsonl"
 VECTORS = ROOT / "data" / "vectors.npy"
-
-DSN = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://rag:{}@localhost:5433/ragdb".format(
-        os.environ.get("POSTGRES_PASSWORD", "")
-    ),
-)
 
 SCHEMA = """
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -56,8 +50,8 @@ CREATE TABLE chunks (
     n_chars         integer,
 
     embedding       vector(1024) NOT NULL,
-    -- японский токенизируется Sudachi снаружи, в Postgres
-    -- попадает уже разбитым по пробелам → 'simple' без стемминга
+    -- Japanese is tokenised by Sudachi outside the database and arrives
+    -- already space-separated → 'simple', no stemming
     tokens          text NOT NULL,
     tsv             tsvector GENERATED ALWAYS AS (to_tsvector('simple', tokens)) STORED
 );
@@ -80,6 +74,9 @@ INDEXES = [
 
 def connect():
     conn = psycopg.connect(DSN)
+    # register_vector needs the vector type, and a fresh database does not have it yet
+    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    conn.commit()
     register_vector(conn)
     return conn
 
@@ -88,13 +85,13 @@ def cmd_schema():
     with connect() as conn:
         conn.execute(SCHEMA)
         conn.commit()
-    print("таблица chunks создана")
+    print("table chunks created")
 
 
 def cmd_load():
     meta = [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
     vecs = np.load(VECTORS)
-    assert len(meta) == len(vecs), f"{len(meta)} чанков vs {len(vecs)} векторов"
+    assert len(meta) == len(vecs), f"{len(meta)} chunks vs {len(vecs)} vectors"
 
     t0 = time.time()
     with connect() as conn:
@@ -120,9 +117,9 @@ def cmd_load():
                         v, to_tsvector_text(c["text"]),
                     ))
                     if i % 2000 == 0:
-                        print(f"  {i}/{len(meta)}  {time.time()-t0:.0f}с")
+                        print(f"  {i}/{len(meta)}  {time.time()-t0:.0f}s")
         conn.commit()
-    print(f"залито {len(meta)} за {(time.time()-t0)/60:.1f} мин")
+    print(f"loaded {len(meta)} in {(time.time()-t0)/60:.1f} min")
 
 
 def cmd_index():
@@ -132,8 +129,8 @@ def cmd_index():
             conn.execute(f"DROP INDEX IF EXISTS {name}")
             conn.execute(sql)
             conn.commit()
-            print(f"  {name}: {time.time()-t0:.1f}с")
-    print("индексы построены")
+            print(f"  {name}: {time.time()-t0:.1f}s")
+    print("indexes built")
 
 
 def cmd_stats():
@@ -141,12 +138,12 @@ def cmd_stats():
         n, ncore = conn.execute(
             "SELECT count(*), count(*) FILTER (WHERE core) FROM chunks"
         ).fetchone()
-        print(f"чанков: {n}   core: {ncore}")
+        print(f"chunks: {n}   core: {ncore}")
 
         size = conn.execute(
             "SELECT pg_size_pretty(pg_total_relation_size('chunks'))"
         ).fetchone()[0]
-        print(f"размер таблицы с индексами: {size}")
+        print(f"table size with indexes: {size}")
 
         for name, in conn.execute(
             "SELECT indexname FROM pg_indexes WHERE tablename='chunks'"
@@ -156,7 +153,7 @@ def cmd_stats():
             ).fetchone()[0]
             print(f"  {name:<22} {isize}")
 
-        print("\nчастые токены (проверка Sudachi):")
+        print("\nfrequent tokens (Sudachi sanity check):")
         for word, cnt in conn.execute("""
             SELECT word, ndoc FROM ts_stat(
               'SELECT tsv FROM chunks'

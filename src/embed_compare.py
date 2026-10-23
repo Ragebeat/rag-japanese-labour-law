@@ -1,4 +1,4 @@
-"""Comparing embedding models on Japanese labour law (phase 7, training project 6).
+"""Comparing embedding models on Japanese labour law.
 
 Two levels, measured separately:
 
@@ -22,7 +22,7 @@ Fairness rules:
   must reproduce eval.py's core recall@5 = 0.68, or this script counts
   differently from before and nothing below it is comparable
 
-Torch here is CPU-only (phase 6: Pascal + current PyTorch builds), so
+Torch here is CPU-only (a Pascal GPU is not supported by current PyTorch builds), so
 encoding is slow. Vectors are cached per model in data/emb/ and the
 encoding resumes after an interruption.
 
@@ -51,7 +51,7 @@ MAXK = max(KS)
 SLICE = 128          # chunks per encode call between checkpoints
 
 # key -> (HF id, query prefix, document prefix, revision). Prefixes from the
-# model cards; revisions pinned 01.10 (phase 6, lesson 21) — the commits the
+# model cards; revisions pinned 01.10 — the commits the
 # vectors in data/emb/ were computed with.
 MODELS = {
     "multilingual-e5-large": ("intfloat/multilingual-e5-large",
@@ -96,7 +96,7 @@ def encode_docs(model, key, texts, prefix):
     vecs = np.lib.format.open_memmap(path, mode="r+" if done else "w+",
                                      dtype=np.float32, shape=(n, dim))
     if done < n:
-        print(f"  кодирование документов: {done}/{n}")
+        print(f"  encoding documents: {done}/{n}")
     t0, start_done = time.time(), done
     while done < n:
         batch = [prefix + t for t in texts[done:done + SLICE]]
@@ -108,7 +108,7 @@ def encode_docs(model, key, texts, prefix):
         state.write_text(json.dumps({"n": n, "done": done, "prefix": prefix}),
                          encoding="utf-8")
         rate = (done - start_done) / max(time.time() - t0, 1e-6)
-        print(f"  {done}/{n}  {rate:.1f} чанк/с  ETA {(n - done) / max(rate, 1e-6) / 60:.1f} мин")
+        print(f"  {done}/{n}  {rate:.1f} chunks/s  ETA {(n - done) / max(rate, 1e-6) / 60:.1f} min")
     return np.asarray(vecs)
 
 
@@ -122,7 +122,7 @@ def truncated(model, texts, prefix):
 
 def run_baseline(golden, core_idx, meta):
     """The existing BGE-M3 vectors and Ollama for queries — the configuration
-    every phase 4-6 number was measured on."""
+    every BGE-M3 number was measured on."""
     idx = Index()
     vecs = idx.vecs[core_idx]
     rows = []
@@ -138,7 +138,7 @@ def run_model(key, golden, texts, meta):
     print(f"\n=== {key} ({hf_id}) ===")
     model = SentenceTransformer(hf_id, device="cpu", revision=rev)
     limit, cut = truncated(model, texts, dp)
-    print(f"  окно {limit} токенов, длиннее окна: {cut} из {len(texts)} чанков")
+    print(f"  window {limit} tokens, longer than the window: {cut} of {len(texts)} chunks")
     vecs = encode_docs(model, key, texts, dp)
     qv = model.encode([qp + g["q"] for g in golden], batch_size=16,
                       normalize_embeddings=True, show_progress_bar=False)
@@ -157,7 +157,7 @@ def diff(base, other, k, qs):
 
     fixed = [i for i in b if not ok(b[i]) and ok(o[i])]
     broke = [i for i in b if ok(b[i]) and not ok(o[i])]
-    print(f"  @{k}: починила {len(fixed)}, сломала {len(broke)}")
+    print(f"  @{k}: fixed {len(fixed)}, broke {len(broke)}")
     for i in fixed:
         print(f"     + #{i:>2} {qs[i][:30]:<32} {b[i]} → {o[i]}")
     for i in broke:
@@ -173,15 +173,15 @@ def main():
     core_idx = np.array([i for i, c in enumerate(all_meta) if c["core"]])
     meta = [all_meta[i] for i in core_idx]
     texts = [c["text"] for c in meta]
-    print(f"вопросов: {len(golden)}, чанков ядра: {len(meta)}")
+    print(f"questions: {len(golden)}, core chunks: {len(meta)}")
 
     report = {}
     base = run_baseline(golden, core_idx, meta)
     report[BASELINE] = {"metrics": metrics([r["pos"] for r in base]), "rows": base}
     r5 = report[BASELINE]["metrics"]["recall@5"]
-    print(f"\nбаза {BASELINE}: recall@5 = {r5:.3f}  (eval.py core: 0.68)")
+    print(f"\nbaseline {BASELINE}: recall@5 = {r5:.3f}  (eval.py core: 0.68)")
     if abs(r5 - 0.68) > 1e-9:
-        print("⚠ база не воспроизводит eval.py — сравнение ниже некорректно, сначала разобраться")
+        print("⚠ the baseline does not reproduce eval.py — the comparison below is invalid, investigate first")
 
     for key in MODELS:
         if only and only not in key:
@@ -189,13 +189,13 @@ def main():
         rows, info = run_model(key, golden, texts, meta)
         report[key] = {"metrics": metrics([r["pos"] for r in rows]), "rows": rows, **info}
 
-    print(f"\n{'модель':<24}" + "".join(f"{f'r@{k}':>8}" for k in KS) + f"{'MRR':>8}")
+    print(f"\n{'model':<24}" + "".join(f"{f'r@{k}':>8}" for k in KS) + f"{'MRR':>8}")
     print("-" * (24 + 8 * (len(KS) + 1)))
     for key, rep in report.items():
         m = rep["metrics"]
         print(f"{key:<24}" + "".join(f"{m[f'recall@{k}']:>8.3f}" for k in KS)
               + f"{m['MRR@20']:>8.3f}")
-    print("⚠ 50 вопросов: разница меньше 0.02 (один вопрос) — шум")
+    print("⚠ 50 questions: a difference below 0.02 (one question) is noise")
 
     for key, rep in report.items():
         if key == BASELINE:
@@ -204,6 +204,10 @@ def main():
         for k in (5, 20):
             diff(report[BASELINE]["rows"], rep["rows"], k, qs)
 
+    # --only measures one model: keep the other models' results already in the file
+    # (overwriting dropped them, and the README table needs all three)
+    if only and OUT.exists():
+        report = {**json.loads(OUT.read_text(encoding="utf-8")), **report}
     OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n→ {OUT}")
 

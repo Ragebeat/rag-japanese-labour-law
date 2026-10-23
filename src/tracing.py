@@ -18,13 +18,13 @@ sent — evaluation runs do not depend on a tracing server being up.
   $env:TRACE=1; uv run python src/agent.py "有給はいつから？"
   -> http://localhost:6006
 
-Pinned by digest, not :latest (phase 6, supply chain): a tag can be moved
+Pinned by digest, not :latest (supply chain): a tag can be moved
 to a different image, a digest cannot. 127.0.0.1 — traces are not for the LAN.
 
-Content is OFF by default (phase 6, OWASP review). Traces kept every
+Content is OFF by default (OWASP review). Traces kept every
 message whole: user questions, the system prompt, and in agent_graph the
 long-term memory inside it — stored with no retention and no auth, on a
-port published to the whole LAN. Every phase 6 finding from traces came
+port published to the whole LAN. Every finding from traces so far came
 from metadata (durations, tokens, load_ms, pair counts); content is needed
 only to debug behaviour — what the model searched, why it refused. So:
 metadata always, content on purpose:
@@ -100,7 +100,7 @@ def _redact(v):
     """The length survives: "the final answer was 900 characters" is a
     metadata finding, what it said is not."""
     s = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, default=str)
-    return f"[скрыто: {len(s)} симв.]"
+    return f"[hidden: {len(s)} chars]"
 
 
 def set_attrs(sp, attrs):

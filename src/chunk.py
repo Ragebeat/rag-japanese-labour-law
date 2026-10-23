@@ -162,15 +162,15 @@ def main():
         s = sorted(sizes)
         return s[min(int(len(s) * p / 100), len(s) - 1)]
 
-    print(f"чанков всего: {len(sizes)}   из них core: {n_core}")
-    print(f"  уровень 1 (параграф):   {stats['lvl1']}")
-    print(f"  уровень 2 (по Item):    {stats['lvl2']}")
-    print(f"  уровень 3 (предложения):{stats['lvl3']}")
-    print(f"пропущено: 削除 {stats['skip_deleted']}, 読替え {stats['skip_yomikae']}")
+    print(f"chunks total: {len(sizes)}   of them core: {n_core}")
+    print(f"  level 1 (paragraph):    {stats['lvl1']}")
+    print(f"  level 2 (by item):      {stats['lvl2']}")
+    print(f"  level 3 (sentences):    {stats['lvl3']}")
+    print(f"skipped: 削除 {stats['skip_deleted']}, 読替え {stats['skip_yomikae']}")
     if sizes:
-        print(f"размер чанка, симв: min {min(sizes)}  p50 {pct(50)}  "
+        print(f"chunk size, chars: min {min(sizes)}  p50 {pct(50)}  "
               f"p90 {pct(90)}  p99 {pct(99)}  max {max(sizes)}")
-        print(f"суммарно символов: {sum(sizes)}")
+        print(f"characters total: {sum(sizes)}")
     print(f"→ {OUT}")
 
 

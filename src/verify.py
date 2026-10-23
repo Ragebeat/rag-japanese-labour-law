@@ -18,8 +18,8 @@ THE JUDGE IS FROM A DIFFERENT FAMILY than the generator. The same gemma would
 be blind in the same places as the generator, and we would be measuring a
 model's agreement with itself.
 
-The judge emits controlled tokens rather than prose — the technique from
-session 7 that has now worked twice (the [N] marker, the 判定 verdict).
+The judge emits controlled tokens rather than prose — a technique
+that has already worked twice (the [N] marker, the 判定 verdict).
 
   uv run python src/verify.py --calibrate   # 20 questions against manual annotation
   uv run python src/verify.py               # the full report for the current mode
@@ -47,7 +47,7 @@ URL = "http://localhost:11434/api/chat"
 # rather than a constant edited between runs.
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen3:8b")
 
-# ⚠️ No real articles appear in the format examples — lesson from session 5.
+# ⚠️ No real articles appear in the format examples — an example in a prompt becomes a template.
 SYSTEM = """あなたは法令回答の検証者です。回答そのものは書きません。
 
 【入力】質問・提供された条文・回答・回答が引用した番号
@@ -140,7 +140,7 @@ def parse_verdict(text, n_chunks):
         "missing": missing or "",
         "contradiction": contra or "",
         # block on: an inapplicable citation OR a missing provision
-        # (decided in session 8: omission blocks on equal terms)
+        # (omission blocks on equal terms)
         "block": bool(bad) or bool(missing) or bool(contra),
     }
 
@@ -152,7 +152,7 @@ def run(rows, mode, client, r):
         raw = judge(row["q"], ch, row["answer"], client)
         v = parse_verdict(raw, len(ch))
         out.append({"id": row["id"], "q": row["q"], **v})
-        mark = "БЛОК" if v["block"] else ("  ?  " if not v["parsed"] else "    ")
+        mark = "BLOCK" if v["block"] else ("  ?  " if not v["parsed"] else "    ")
         print(f"{i:>2}/{len(rows)} {mark} {row['q'][:26]}")
     return out
 
@@ -169,11 +169,11 @@ def cmd_calibrate():
     """
     manual = parse_manual()
     if not manual:
-        sys.exit("manual_review.md не заполнен")
+        sys.exit("manual_review.md is not filled in")
 
     path = report_path("dedupe")
     if not path.exists():
-        sys.exit(f"нужен {path.name} (переименуй старый gen_report.json)")
+        sys.exit(f"{path.name} is needed (rename the old gen_report.json)")
     by_id = {r["id"]: r for r in json.loads(path.read_text(encoding="utf-8"))}
     rows = [by_id[i] for i in sorted(manual) if i in by_id]
 
@@ -190,8 +190,8 @@ def cmd_calibrate():
         "不可 ~ extra": (lambda v: bool(v["inapplicable"]),
                         lambda m: m["extra"] == "yes"),
     }
-    print(f"\nсудья: {JUDGE_MODEL}   вопросов: {len(res)}")
-    print(f"не разобрано: {sum(1 for v in res if not v['parsed'])}")
+    print(f"\njudge: {JUDGE_MODEL}   questions: {len(res)}")
+    print(f"unparsed: {sum(1 for v in res if not v['parsed'])}")
     for name, (jf, hf) in pairs.items():
         both = only_j = only_h = neither = 0
         for v in res:
@@ -201,8 +201,8 @@ def cmd_calibrate():
             only_h += h and not j
             neither += not j and not h
         agree = (both + neither) / len(res)
-        print(f"  {name:<20} согласие {agree:.2f}  "
-              f"оба {both} · только судья {only_j} · только разметка {only_h}")
+        print(f"  {name:<20} agreement {agree:.2f}  "
+              f"both {both} · judge only {only_j} · annotation only {only_h}")
 
     out = ROOT / "data" / f"verify_calibrate_{JUDGE_MODEL.replace(':', '-')}.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -212,7 +212,7 @@ def cmd_calibrate():
 def cmd_full(mode=DEFAULT_MODE):
     path = report_path(mode)
     if not path.exists():
-        sys.exit(f"нужен {path.name} — сначала generate.py --eval")
+        sys.exit(f"{path.name} is needed — run generate.py --eval first")
     rows = json.loads(path.read_text(encoding="utf-8"))
 
     r = Reranked()
@@ -220,13 +220,13 @@ def cmd_full(mode=DEFAULT_MODE):
         res = run(rows, mode, cl, r)
 
     n = len(res)
-    print(f"\nсудья: {JUDGE_MODEL}   режим: {mode}   вопросов: {n}")
-    print(f"не разобрано:        {sum(1 for v in res if not v['parsed'])}")
-    print(f"неприменимая ссылка: {sum(1 for v in res if v['inapplicable'])}")
-    print(f"пропущено положение: {sum(1 for v in res if v['missing'])}")
-    print(f"противоречие:        {sum(1 for v in res if v['contradiction'])}")
+    print(f"\njudge: {JUDGE_MODEL}   mode: {mode}   questions: {n}")
+    print(f"unparsed:              {sum(1 for v in res if not v['parsed'])}")
+    print(f"inapplicable citation: {sum(1 for v in res if v['inapplicable'])}")
+    print(f"missing provision:     {sum(1 for v in res if v['missing'])}")
+    print(f"contradiction:         {sum(1 for v in res if v['contradiction'])}")
     blocked = sum(1 for v in res if v["block"])
-    print(f"ЗАБЛОКИРОВАНО:       {blocked} = {blocked / n:.2f}")
+    print(f"BLOCKED:               {blocked} = {blocked / n:.2f}")
 
     out = ROOT / "data" / f"verify_{mode}.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -294,7 +294,7 @@ def structural_omission(question, chunks, answer, rr):
 def cmd_structural(mode=DEFAULT_MODE):
     path = report_path(mode)
     if not path.exists():
-        sys.exit(f"нужен {path.name}")
+        sys.exit(f"{path.name} is needed")
     rows = json.loads(path.read_text(encoding="utf-8"))
     rr = Reranked()
 
@@ -303,12 +303,12 @@ def cmd_structural(mode=DEFAULT_MODE):
         ch = retrieve(rr, row["q"], mode)
         f = structural_omission(row["q"], ch, row["answer"], rr)
         res.append({"id": row["id"], "q": row["q"], "omission": f})
-        print(f"{i:>2}/{len(rows)} {'ФЛАГ' if f else '    '} {row['q'][:26]}")
+        print(f"{i:>2}/{len(rows)} {'FLAG' if f else '    '} {row['q'][:26]}")
 
     n = len(res)
     hit = [r for r in res if r["omission"]]
-    print(f"\nрежим: {mode}   вопросов: {n}")
-    print(f"помечено: {len(hit)} = {len(hit) / n:.2f}")
+    print(f"\nmode: {mode}   questions: {n}")
+    print(f"flagged: {len(hit)} = {len(hit) / n:.2f}")
 
     manual = parse_manual()
     if manual:
@@ -319,8 +319,8 @@ def cmd_structural(mode=DEFAULT_MODE):
                      if r["omission"] and manual[r["id"]]["substance"] != "partial")
         only_m = sum(1 for r in common
                      if not r["omission"] and manual[r["id"]]["substance"] == "partial")
-        print(f"против разметки ({len(common)}): оба {both} · только структура {only_s}"
-              f" · только разметка {only_m}")
+        print(f"against the annotation ({len(common)}): both {both} · structure only {only_s}"
+              f" · annotation only {only_m}")
 
     out = ROOT / "data" / f"omission_{mode}.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")

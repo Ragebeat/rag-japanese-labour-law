@@ -29,7 +29,7 @@ from query_llm import expand_combo  # noqa: E402
 import tracing  # noqa: E402
 
 MODEL = "BAAI/bge-reranker-v2-m3"
-# Pinned commit on Hugging Face (phase 6, OWASP supply chain). Without it the
+# Pinned commit on Hugging Face (OWASP: supply chain). Without it the
 # model is "whatever main points to" on the next fresh download: new weights
 # would silently move every rerank score — and the score gate threshold with
 # them. Part of the run fingerprint. Change on purpose, then re-run
@@ -55,7 +55,7 @@ def _get():
     global _model
     if _model is None:
         from sentence_transformers import CrossEncoder
-        print(f"загрузка {MODEL}...", file=sys.stderr)
+        print(f"loading {MODEL}...", file=sys.stderr)
         _model = CrossEncoder(MODEL, max_length=512, revision=REVISION)
     return _model
 
@@ -112,7 +112,7 @@ class Reranked:
         paragraphs of one article against each other.
 
         rerank_on defaults to 'original' — the same variant as the working
-        configuration (KW in generate.py, phase 7). Otherwise the scores would be on a
+        configuration (KW in generate.py). Otherwise the scores would be on a
         different scale from the ones the chunks were selected by.
         """
         if not texts:
@@ -130,14 +130,14 @@ def main():
     query = " ".join(a for a in args if not a.startswith("--"))
 
     r = Reranked()
-    print(f"запрос: {query}\n")
+    print(f"query: {query}\n")
     res = r.search(query, k=10, mode="vector", expand_query=True,
                    narrow=True, combo=True)
     for i, c in enumerate(res, 1):
         move = c["rank_before"] - i
         arrow = f"↑{move}" if move > 0 else (f"↓{-move}" if move < 0 else " —")
         head = f"{c['law_title'][:20]} {c['article_title']}{c['article_caption'] or ''}"
-        print(f"{i:>2}. {c['rerank_score']:+.3f}  был {c['rank_before']:>2} {arrow}  {head}")
+        print(f"{i:>2}. {c['rerank_score']:+.3f}  was {c['rank_before']:>2} {arrow}  {head}")
 
 
 if __name__ == "__main__":

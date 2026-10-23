@@ -1,9 +1,9 @@
-"""Agent over the labour-law RAG. Phase 5, session 1: a bare ReAct loop.
+"""Agent over the labour-law RAG: a bare ReAct loop.
 
 ReAct (Reasoning + Acting): the model alternates thinking and calling a tool,
 and decides by itself how many steps it needs.
 
-Where the line between code and model runs — one rule from session 1:
+Where the line between code and model runs — one rule:
 whatever can be written as a rule is code. The model keeps only the semantic
 rewording of the query.
 
@@ -52,7 +52,7 @@ def measured_threshold():
 THRESHOLD = measured_threshold()
 
 # ──────────────────────────────── the limits ─────────────────────────────────
-# Each one catches a failure the others cannot. See the phase 5 notes.
+# Each one catches a failure the others cannot.
 
 MAX_ITER = 8           # a fuse against infinity, not a budget
 TOKEN_CAP = 60_000     # cumulative across every model call, history included
@@ -65,7 +65,7 @@ TOOL_TIMEOUT = 90.0    # per tool call, shorter than the loop. Was 45: the weak 
                        # under MCP one such call ran past 45 s (13 s on the LLM alone)
 LLM_TIMEOUT = 90.0     # per model call
 
-NOISE = 0.02           # score difference below this is noise (phase 4 rule)
+NOISE = 0.02           # score difference below this is noise (golden-set rule)
 NEW_SHARE = 0.4        # at least 2 of 5 articles must be new to count as progress
 STALL_MAX = 2          # consecutive calls without progress = spinning
 
@@ -132,7 +132,7 @@ def _expansion(query):
     """
     _, d = expand(query, narrow=True)
     if d:
-        return "словарь", d
+        return "dictionary", d
     _, t = expand_combo(query)
     return ("LLM", t) if t else ("—", [])
 
@@ -205,7 +205,7 @@ class Tool:
                     set(), None, None)
 
         keys, top = {_key(c) for c in hits}, _top(hits)
-        exp = ("выкл", []) if KW.get("mode") == "vector" else _expansion(query)
+        exp = ("off", []) if KW.get("mode") == "vector" else _expansion(query)
 
         if top is not None and top >= THRESHOLD:
             return {
@@ -368,7 +368,7 @@ NUDGE = "まず labor_laws_rag で検索してから答えてください。"
 # The code decides THAT a second attempt happens; the model decides WHAT to
 # search. On the tax question the model skipped the reframing suggested in
 # `next` and refused — while 労基法 第24条 was in the corpus all along.
-# No example concept here: an example in a prompt becomes a template (phase 4).
+# No example concept here: an example in a prompt becomes a template.
 REFRAME = """次の論点は該当する条文が見つかりませんでした: {qs}
 質問の背景にある別の法的概念で言い換え、一度だけ再検索してください。
 同じ言葉の並べ替えではなく、別の制度・原則として捉え直すこと。
@@ -448,7 +448,7 @@ def _run(question, tool, trace=False):
             try:
                 resp = chat(http, msgs)
             except Exception as e:                  # noqa: BLE001
-                log(f"✗ модель: {type(e).__name__}: {e}")
+                log(f"✗ model: {type(e).__name__}: {e}")
                 stop = "llm_error"
                 break
             budget.charge(resp)
@@ -456,7 +456,7 @@ def _run(question, tool, trace=False):
             msgs.append(msg)
             calls = msg.get("tool_calls") or []
             log(f"#{budget.iters} prompt={budget.last_prompt} "
-                f"всего={budget.tokens} вызовов={len(calls)}")
+                f"total={budget.tokens} calls={len(calls)}")
 
             if not calls:
                 # Answering without a single search breaks rule 1. One nudge,
@@ -464,7 +464,7 @@ def _run(question, tool, trace=False):
                 if not called and not nudged:
                     nudged = True
                     msgs.append({"role": "user", "content": NUDGE})
-                    log("↻ ответ без поиска — толчок")
+                    log("↻ answer without a search — nudge")
                     continue
                 return _result(msg.get("content", "").strip(), "answered",
                                budget, found, ungrounded=not called)
@@ -497,7 +497,7 @@ def _run(question, tool, trace=False):
                     log(f"  → {r['query']!r} | {r['status']} top={top_s}"
                         f"{' widened' if r.get('widened') else ''}")
                     if e:
-                        log(f"      расширение ({e[0]}): {e[1]}")
+                        log(f"      expansion ({e[0]}): {e[1]}")
                     if r["status"] == "ok":
                         for a in r["articles"]:
                             if (a["law"], a["article"]) not in found:
@@ -513,7 +513,7 @@ def _run(question, tool, trace=False):
                     stop = "tool_error"      # code decides; the model is not asked
                 elif prog.update(keys, top) >= STALL_MAX:
                     stop = "loop"
-                    log(f"  ⟲ {STALL_MAX} вызова без прогресса")
+                    log(f"  ⟲ {STALL_MAX} calls without progress")
             if stop:
                 break
             # One reframing attempt, once per question. After it the model is
@@ -522,10 +522,10 @@ def _run(question, tool, trace=False):
                 reframed = True
                 msgs.append({"role": "user",
                              "content": REFRAME.format(qs="、".join(weak_qs))})
-                log("↻ weak — толчок на переформулировку")
+                log("↻ weak — nudge to rephrase")
 
         # ── the final turn: exhausting a budget is a last move, not an exception
-        log(f"■ стоп: {stop} → финальный ход")
+        log(f"■ stop: {stop} → final turn")
         if stop == "llm_error":
             return _result(fallback(stop, found), stop, budget, found)
         try:
@@ -536,7 +536,7 @@ def _run(question, tool, trace=False):
             budget.charge(resp, final=True)
             text = resp["message"].get("content", "").strip()
         except Exception as e:                      # noqa: BLE001
-            log(f"✗ финальный ход: {type(e).__name__}: {e}")
+            log(f"✗ final turn: {type(e).__name__}: {e}")
             text = fallback(stop, found)
         return _result(text, stop, budget, found)
 
@@ -558,33 +558,33 @@ def main():
     q = " ".join(a for a in args if not a.startswith("--")) or \
         "育休中に残業させられる？"
 
-    print(f"порог (5-й перцентиль, score_gate.json): {THRESHOLD:.3f}")
+    print(f"threshold (5th percentile, score_gate.json): {THRESHOLD:.3f}")
     tracing.setup()
     tool = Tool()
-    print(f"вопрос: {q}\n")
+    print(f"question: {q}\n")
     res = run(q, tool, trace=trace)
 
-    print("\n— ответ —")
+    print("\n— answer —")
     print(res["answer"])
-    print("\n— итог —")
-    print(f"стоп: {res['stop']}  итераций: {res['iterations']}  "
-          f"токенов: {res['tokens']}  время: {res['seconds']}s")
+    print("\n— summary —")
+    print(f"stop: {res['stop']}  iterations: {res['iterations']}  "
+          f"tokens: {res['tokens']}  time: {res['seconds']}s")
     if res["ungrounded"]:
-        print("⚠ ответ без единого поиска")
+        print("⚠ answered without a single search")
     for law, art in res["found"]:
         print(f"  • {law} {art}")
 
-    # Sanity check, the phase 4 lesson: make sure the counter measures what we
+    # Sanity check: make sure the counter measures what we
     # think it measures. The history only grows, so prompt_eval_count must too.
     # If it drops, Ollama is counting only the uncached part of the prompt,
     # and the token budget above is reading the wrong number.
     p = res["prompts"]
     if len(p) < 2:
-        print(f"prompt_eval_count: {p} — меньше двух вызовов с тулзами, проверка не информативна")
+        print(f"prompt_eval_count: {p} — fewer than two tool calls, the check says nothing")
     elif any(b < a for a, b in zip(p, p[1:])):
-        print(f"⚠ prompt_eval_count не монотонен: {p} — бюджет токенов врёт")
+        print(f"⚠ prompt_eval_count is not monotonic: {p} — the token budget is wrong")
     else:
-        print(f"prompt_eval_count монотонен: {p}")
+        print(f"prompt_eval_count is monotonic: {p}")
 
 
 if __name__ == "__main__":

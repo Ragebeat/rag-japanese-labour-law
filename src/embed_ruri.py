@@ -1,4 +1,4 @@
-"""Ruri v3 vectors for the whole corpus, into Postgres next to BGE-M3 (phase 7).
+"""Ruri v3 vectors for the whole corpus, into Postgres next to BGE-M3.
 
   uv run python src/embed_ruri.py encode   # non-core chunks (core reused from embed_compare)
   uv run python src/embed_ruri.py load     # column embedding_ruri + HNSW index
@@ -58,7 +58,7 @@ def cmd_encode():
     assert len(core_vecs) == len(core), "core cache is from a different corpus"
 
     model = SentenceTransformer(hf_id, device="cpu", revision=rev)
-    print(f"ядро из кэша: {len(core)}, кодировать: {len(rest)}")
+    print(f"core from cache: {len(core)}, to encode: {len(rest)}")
     rest_vecs = encode_docs(model, f"{KEY}.rest", [meta[i]["text"] for i in rest], dp)
 
     full = np.zeros((len(meta), CFG["dim"]), dtype=np.float32)
@@ -67,7 +67,7 @@ def cmd_encode():
     norms = np.linalg.norm(full, axis=1)
     assert norms.min() > 0.99, "a zero or unnormalised vector slipped through"
     np.save(FULL, full)
-    print(f"→ {FULL}  форма {full.shape}")
+    print(f"→ {FULL}  shape {full.shape}")
 
 
 def cmd_load():
@@ -91,7 +91,7 @@ def cmd_load():
         missing = conn.execute(f"SELECT count(*) FROM chunks "
                                f"WHERE {CFG['column']} IS NULL").fetchone()[0]
         assert missing == 0, f"{missing} rows without a Ruri vector"
-        print(f"  векторы: {time.time() - t0:.0f}с")
+        print(f"  vectors: {time.time() - t0:.0f}s")
 
         t1 = time.time()
         conn.execute("DROP INDEX IF EXISTS idx_chunks_hnsw_ruri")
@@ -99,7 +99,7 @@ def cmd_load():
         conn.execute(f"CREATE INDEX idx_chunks_hnsw_ruri ON chunks USING hnsw "
                      f"({CFG['column']} vector_ip_ops) WITH (m = 16, ef_construction = 64)")
         conn.commit()
-        print(f"  индекс HNSW: {time.time() - t1:.0f}с")
+        print(f"  HNSW index: {time.time() - t1:.0f}s")
 
 
 def cmd_check():
@@ -116,7 +116,7 @@ def cmd_check():
         s = full[core] @ q
         exact.append(set(core[np.argsort(-s)[:20]].tolist()))
 
-    print(f"{'ef_search':>10} {'совпадение топ-20':>18} {'худший вопрос':>15}")
+    print(f"{'ef_search':>10} {'top-20 overlap':>18} {'worst question':>15}")
     for ef in (40, 100, 200, 400):
         h.conn.execute(f"SET hnsw.ef_search = {ef}")
         overlaps = []

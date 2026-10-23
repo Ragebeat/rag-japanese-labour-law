@@ -51,13 +51,13 @@ def run(h, golden, mode, core_only):
 def main():
     golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
     h = Hybrid()
-    print(f"вопросов: {len(golden)}\n")
+    print(f"questions: {len(golden)}\n")
 
     report = {}
     for scope, core_only in (("core", True), ("all", False)):
-        print(f"{'='*54}\nСРЕЗ: {scope}\n{'='*54}")
-        print(f"{'режим':<10} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
-              f"{'MRR':>6} {'сек/запр':>9}")
+        print(f"{'='*54}\nSLICE: {scope}\n{'='*54}")
+        print(f"{'mode':<10} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
+              f"{'MRR':>6} {'sec/query':>9}")
         for mode in ("vector", "bm25", "hybrid"):
             m, rows = run(h, golden, mode, core_only)
             report[f"{scope}/{mode}"] = {"metrics": m, "rows": rows}
@@ -67,8 +67,8 @@ def main():
 
         base = BASELINE[scope]
         best = report[f"{scope}/hybrid"]["metrics"]["recall@5"]
-        print(f"\nбаза (naive vector, numpy) recall@5 = {base:.3f}")
-        print(f"гибрид                         = {best:.3f}  "
+        print(f"\nbaseline (naive vector, numpy) recall@5 = {base:.3f}")
+        print(f"hybrid                             = {best:.3f}  "
               f"({best - base:+.3f})\n")
 
     # what got fixed and what broke relative to plain vector search
@@ -85,17 +85,17 @@ def main():
     only_bm = [i for i in qs if not ok(v[i]) and ok(b[i])]
     nobody = [i for i in qs if not ok(v[i]) and not ok(b[i]) and not ok(hy[i])]
 
-    print(f"{'='*54}\nРАЗБОР (core, recall@5)\n{'='*54}")
-    print(f"починил гибрид: {len(fixed)}")
+    print(f"{'='*54}\nBREAKDOWN (core, recall@5)\n{'='*54}")
+    print(f"fixed by hybrid: {len(fixed)}")
     for i in fixed:
         print(f"   #{i:>2} {qs[i][:32]:<34} vec {v[i]} → hyb {hy[i]}")
-    print(f"сломал гибрид: {len(broke)}")
+    print(f"broken by hybrid: {len(broke)}")
     for i in broke:
         print(f"   #{i:>2} {qs[i][:32]:<34} vec {v[i]} → hyb {hy[i]}")
-    print(f"вытянул только BM25: {len(only_bm)}")
+    print(f"found by BM25 only: {len(only_bm)}")
     for i in only_bm:
         print(f"   #{i:>2} {qs[i][:32]:<34} bm25 {b[i]}")
-    print(f"не вытянул никто: {len(nobody)}")
+    print(f"found by neither: {len(nobody)}")
     for i in nobody:
         print(f"   #{i:>2} {qs[i][:40]}")
 

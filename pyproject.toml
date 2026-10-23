@@ -1,7 +1,7 @@
 [project]
 name = "rag"
 version = "0.1.0"
-description = "Add your description here"
+description = "RAG over Japanese labour law with measured retrieval and generation quality"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -13,9 +13,11 @@ dependencies = [
     "numpy>=2.5.2",
     "pgvector>=0.5.0",
     "psycopg[binary]>=3.3.5",
+    "requests>=2.34.2",
     "sentence-transformers>=6.0.1",
     "sudachidict-core>=20260723",
     "sudachipy>=0.6.11",
+    "tiktoken>=0.14.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
@@ -28,4 +30,4 @@ dependencies = [
 #  - the 6 GB are already taken by Ollama (gemma4 + bge-m3 do not fit
 #    together). A resident 2 GB cross-encoder would push gemma partly onto
 #    the CPU: a faster rerank for a slower generation.
-# All phase 4-6 measurements were made with the reranker on the CPU.
+# All measurements in the README were made with the reranker on the CPU.

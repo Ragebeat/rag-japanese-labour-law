@@ -9,15 +9,15 @@ const EXAMPLES = [
   "バイトでも有給ある？",
 ];
 
-// Вердикт приходит первой строкой ответа. Показываем его значком,
-// а из текста убираем — иначе он читается как часть ответа.
+// The verdict arrives as the first line of the answer. It is shown as a badge
+// and removed from the text — otherwise it reads as part of the answer.
 function splitVerdict(text) {
   const m = text.match(/^判定[:：]\s*(回答可能|回答不可)\s*/);
   if (!m) return { verdict: null, body: text };
   return { verdict: m[1], body: text.slice(m[0].length) };
 }
 
-// Маркеры [N] делаем кликабельными: они связывают утверждение с источником.
+// [N] markers are clickable: they tie a statement to its source.
 function Answer({ text, onPick, active }) {
   const parts = text.split(/(\[\d+\])/g);
   return (
@@ -83,7 +83,7 @@ export default function App() {
   const [err, setErr] = useState(null);
   const [active, setActive] = useState(null);
   const [ms, setMs] = useState(null);
-  // Сколько запросов впереди в очереди сервера; null — не в очереди.
+  // How many requests are ahead in the server queue; null — not queued.
   const [ahead, setAhead] = useState(null);
   const abort = useRef(null);
 
@@ -116,7 +116,7 @@ export default function App() {
             setMeta(d);
             setMs(Math.round(performance.now() - t0));
           },
-          // Сервер шлёт код, а не текст исключения: текст переводим здесь.
+          // The server sends a code, not the exception text: the text is translated here.
           error: (d) => {
             setAhead(null);
             setErr(t.errors[d.code] ?? d.message ?? d.code);

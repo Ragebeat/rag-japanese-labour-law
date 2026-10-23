@@ -1,7 +1,7 @@
 """Does the top-1/top-2 margin separate "source found" from "not found"
-better than the absolute top-1 score? Phase 6, session 1.
+better than the absolute top-1 score?
 
-The hypothesis comes from phase 5. On two model-reformulated queries the
+The hypothesis comes from the agent runs. On two model-reformulated queries the
 absolute gate ranked backwards: 労基法 第24条, the right article, came first
 at 0.091 (below the 0.100 threshold -> refusal), while junk came first at
 0.205 (above -> accepted). A cross-encoder score is not comparable ACROSS
@@ -11,7 +11,7 @@ A relative signal might not depend on how the query was phrased.
 Two candidates, declared before measuring so the prettier one cannot be
 picked afterwards:
   diff  = top1 - top2
-  ratio = top1 / top2     (phase 5 said "ten times" — that is the ratio)
+  ratio = top1 / top2     (the agent runs suggested "ten times": that is the ratio)
 The threshold for each is set by the same product rule as score_gate.py —
 the 5th percentile of group A — and only then do we look at what came out.
 
@@ -20,9 +20,9 @@ Groups, as in score_gate.py (same reranking pass, same caveats):
   B — the gold article removed from the pool (ablation; inflated, see there)
   C — a natural retrieval miss (honest, but n is small)
 
-⚠️ golden holds homogeneous colloquial questions, while the phase 5 problem
+⚠️ golden holds homogeneous colloquial questions, while the agent-run problem
 appeared on reformulated ones. So a few PROBES are added: queries from
-phase 5, each labelled automatically by whether 第24条 came first.
+the agent runs, each labelled automatically by whether 第24条 came first.
 
   uv run python src/margin_gate.py
 """
@@ -40,7 +40,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / "data" / "margin_gate.json"
 FLOOR = 1e-4          # keeps the ratio finite when top2 is ~0
 
-# Queries from phase 5 (agent runs and the rerank.py check). 第24条 first ->
+# Queries from the agent runs and the rerank.py check. 第24条 first ->
 # the ranking found the right article; anything else first -> junk.
 PROBES = [
     "給料から勝手に天引きされた 賃金の全額払い",
@@ -94,8 +94,8 @@ def main():
         "C": [x["full"] for x in rows if not x["hit"]],
     }
 
-    print(f"\n{'сигнал':<7} {'AUC A↔B':>8} {'AUC A↔C':>8}   {'порог':>8}  "
-          f"{'A ниже':>7} {'B ниже':>7} {'C ниже':>7}")
+    print(f"\n{'signal':<7} {'AUC A↔B':>8} {'AUC A↔C':>8}   {'thresh':>8}  "
+          f"{'A below':>7} {'B below':>7} {'C below':>7}")
     summary = {}
     for s in SIGNALS:
         A = [g[s] for g in groups["A"]]
@@ -109,11 +109,11 @@ def main():
         print(f"{s:<7} {auc(A, B):>8.3f} {auc(A, C):>8.3f}   {thr:>8.3f}  "
               f"{below['A']:>7.2f} {below['B']:>7.2f} {below['C']:>7.2f}")
     print(f"  n: A={len(groups['A'])}  B={len(groups['B'])}  C={len(groups['C'])}"
-          f"   ← AUC A↔B завышена (удаляли часто сам топ-1), A↔C честная, но n мал")
-    print("  «B ниже», «C ниже» — доля, которую гейт правильно отсечёт; "
-          "«A ниже» ≈ 0.05 по построению (цена: over-refusal)")
+          f"   ← AUC A↔B is inflated (often the top-1 itself was removed); A↔C is honest, but n is small")
+    print("  \"B below\", \"C below\" — the share the gate correctly cuts off; "
+          "\"A below\" ≈ 0.05 by construction (the cost: over-refusal)")
 
-    print("\n── пробы из фазы 5 (переформулированные запросы) ──")
+    print("\n── probes from the agent runs (reformulated queries) ──")
     probes = []
     for p in PROBES:
         rk = ranked(p)
@@ -122,11 +122,11 @@ def main():
         passes = {s: sg[s] >= summary[s]["threshold"] for s in SIGNALS}
         probes.append({"q": p, "right": right, **sg, "passes": passes})
         head = f"{rk[0]['law_title'][:10]} {rk[0]['article_title']}" if rk else "—"
-        verdict = "  ".join(f"{s}:{'пропуск' if passes[s] else 'отказ'}" for s in SIGNALS)
-        print(f"  {'✓ 第24条' if right else '✗ мусор '}  {head:<22} "
+        verdict = "  ".join(f"{s}:{'pass' if passes[s] else 'refuse'}" for s in SIGNALS)
+        print(f"  {'✓ 第24条' if right else '✗ junk  '}  {head:<22} "
               f"top1 {sg['top1']:.3f} diff {sg['diff']:+.3f} ratio {sg['ratio']:>6.1f}  "
               f"| {verdict}")
-    print("  хороший сигнал: ✓ → пропуск, ✗ → отказ")
+    print("  a good signal: ✓ → pass, ✗ → refuse")
 
     OUT.write_text(json.dumps({"rows": rows, "summary": summary, "probes": probes},
                               ensure_ascii=False, indent=2), encoding="utf-8")

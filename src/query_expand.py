@@ -3,7 +3,7 @@
 The dictionary lives in `data/synonyms.json` and is extended without touching
 the code.
 
-The diagnosis from session 3: hybrid search failed because of a terminology
+The diagnosis: hybrid search failed because of a terminology
 gap — パワハラ and 育休 are ABSENT from the statutory text entirely.
 
 ⚠️ The dictionary was written FROM DOMAIN KNOWLEDGE, not from the list of
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         "通勤中のケガも労災？",
         "1日何時間まで働かせていいの？",
     ]
-    print(f"словарь: {len(synonyms())} пар → {DICT_PATH}\n")
+    print(f"dictionary: {len(synonyms())} pairs → {DICT_PATH}\n")
     for q in tests:
         _, extra = expand(q, narrow=True)
         print(f"{q}\n   narrow: {extra or '—'}")

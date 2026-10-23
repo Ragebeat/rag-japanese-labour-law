@@ -1,4 +1,4 @@
-"""Is the generation context silently truncated? Phase 6, session 1.
+"""Is the generation context silently truncated?
 
 generate() sends no num_ctx. Current Ollama picks the default window from
 VRAM: 4096 tokens below ~24 GiB. One user message holds five whole articles
@@ -13,7 +13,7 @@ with a large one. A different prompt_eval_count means that prompt was cut.
 Two passes, not alternating per question: changing num_ctx reloads the
 model, and alternating would reload it a hundred times.
 
-If a phase 4 report exists, truncated questions are matched with their
+If the base-prompt report (gen_report_whole.json) exists, truncated questions are matched with their
 recorded hit / verdict — to see whether truncation explains any of the
 over-refusals measured back then.
 
@@ -58,14 +58,14 @@ def count(http, msgs, num_ctx=None):
 def main():
     golden = load_golden()
     r = Reranked()
-    print(f"ретрив {len(golden)} вопросов, режим {DEFAULT_MODE}…")
+    print(f"retrieving {len(golden)} questions, mode {DEFAULT_MODE}…")
     prompts = [(g, messages(g["q"], retrieve(r, g["q"], DEFAULT_MODE)))
                for g in golden]
 
     rows = {g["id"]: {"id": g["id"], "q": g["q"]} for g, _ in prompts}
     with httpx.Client() as http:
         for label, ctx in (("default", None), ("big", BIG)):
-            print(f"проход «{label}» (num_ctx = {ctx or 'по умолчанию'})…")
+            print(f"pass \"{label}\" (num_ctx = {ctx or 'default'})…")
             for g, msgs in prompts:
                 rows[g["id"]][label] = count(http, msgs, ctx)
 
@@ -73,24 +73,24 @@ def main():
     full = [x["big"] for x in rows]
     cut = [x for x in rows if x["default"] < x["big"] - TOLERANCE]
 
-    print(f"\nразмер промпта генерации, токенов: min {min(full)} · "
-          f"медиана {int(statistics.median(full))} · max {max(full)}")
+    print(f"\ngeneration prompt size, tokens: min {min(full)} · "
+          f"median {int(statistics.median(full))} · max {max(full)}")
     if max(full) > BIG * 0.95:
-        print(f"⚠ даже {BIG} на грани — проверка «big» сама могла обрезать")
+        print(f"⚠ even {BIG} is borderline — the \"big\" pass itself may have truncated")
 
-    print(f"\nобрезано: {len(cut)}/{len(rows)}")
+    print(f"\ntruncated: {len(cut)}/{len(rows)}")
     if not cut:
-        print("→ замеры фазы 4 сделаны на полном контексте, num_ctx не влиял")
+        print("→ the earlier measurements used the full context; num_ctx had no effect")
     else:
         window = max(x["default"] for x in cut)
-        print(f"окно по умолчанию, судя по обрезанным: ~{window} токенов")
+        print(f"default window, judging by the truncated ones: ~{window} tokens")
 
         base = {}
         if report_path(DEFAULT_MODE).exists():
             base = {b["id"]: b for b in json.loads(
                 report_path(DEFAULT_MODE).read_text(encoding="utf-8"))}
 
-        print("\n  id    полный  дошло  потеряно   hit  вердикт  вопрос")
+        print("\n  id    full    kept   lost       hit  verdict  question")
         for x in sorted(cut, key=lambda x: x["default"] - x["big"]):
             b = base.get(x["id"], {})
             hit = {True: "hit", False: "MISS"}.get(b.get("hit"), " ? ")
@@ -102,10 +102,10 @@ def main():
             over = [x for x in cut if base.get(x["id"], {}).get("hit")
                     and base[x["id"]].get("verdict") == "no"]
             if over:
-                print(f"\n⚠ {len(over)} из обрезанных — over-refusal фазы 4 "
-                      f"(статья найдена, модель отказала): "
+                print(f"\n⚠ {len(over)} of the truncated are earlier over-refusals "
+                      f"(article found, model refused): "
                       + ", ".join(f"#{x['id']}" for x in over)
-                      + "\n  Кандидаты на объяснение: нужную статью модель просто не видела")
+                      + "\n  Candidate explanation: the model simply never saw the article")
 
     OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n→ {OUT}")

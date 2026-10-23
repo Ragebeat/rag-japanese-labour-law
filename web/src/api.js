@@ -1,9 +1,9 @@
-// SSE поверх POST: EventSource умеет только GET, поэтому читаем поток
-// вручную через fetch + ReadableStream.
+// SSE over POST: EventSource only does GET, so the stream is read
+// by hand through fetch + ReadableStream.
 //
-// Важное про разбор: кадр SSE заканчивается пустой строкой, но кадр может
-// прийти разорванным между двумя chunk'ами. Поэтому держим буфер и режем
-// только по завершённым кадрам, иначе на длинных ответах будут потери.
+// Parsing matters: an SSE frame ends with an empty line, but a frame can
+// arrive split across two chunks. So a buffer is kept and cut only at
+// complete frames — otherwise long answers lose data.
 
 function parseFrame(frame) {
   let event = "message";

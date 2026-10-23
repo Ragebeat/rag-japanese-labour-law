@@ -29,7 +29,7 @@ CASES = [
 
 def check(name, got, want):
     ok = got == want
-    print(f"{'✓' if ok else '✗'} {name}: {got}" + ("" if ok else f"  (ждали {want})"))
+    print(f"{'✓' if ok else '✗'} {name}: {got}" + ("" if ok else f"  (expected {want})"))
     return ok
 
 
@@ -37,7 +37,7 @@ def run():
     r = [check(text[:28], guard_links(text)[1], want) for text, want in CASES]
 
     out, _ = guard_links("連絡は info@evil.example.com まで")
-    r.append(check("почта вырезана целиком", "info@" in out, False))
+    r.append(check("e-mail removed entirely", "info@" in out, False))
 
     # Streaming: every split size; no emitted piece may carry any part of the
     # attacker's domain, and the whole must equal the one-shot guard.
@@ -54,8 +54,8 @@ def run():
         sent += g.flush()
         if sent != guard_links(full)[0]:
             mismatch.append(step)
-    r.append(check("поток: ни куска адреса наружу", leaked, []))
-    r.append(check("поток: итог = проверка целиком", mismatch, []))
+    r.append(check("stream: no fragment of the address leaks", leaked, []))
+    r.append(check("stream: result equals the whole-text check", mismatch, []))
     return r
 
 

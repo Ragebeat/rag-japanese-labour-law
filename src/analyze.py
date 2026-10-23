@@ -26,7 +26,7 @@ def pct(values, p):
 
 def describe(name, values):
     if not values:
-        print(f"{name}: пусто")
+        print(f"{name}: empty")
         return
     print(f"\n{name}  (n={len(values)})")
     print(
@@ -34,7 +34,7 @@ def describe(name, values):
         f"   p75 {pct(values, 75):>6}   p90 {pct(values, 90):>6}"
         f"   p99 {pct(values, 99):>6}   max {max(values):>7}"
     )
-    print(f"  mean {st.mean(values):.0f}   сумма {sum(values)}")
+    print(f"  mean {st.mean(values):.0f}   sum {sum(values)}")
 
 
 def main():
@@ -82,39 +82,39 @@ def main():
                         if len(par_samples) < 300:
                             par_samples.append(pt)
 
-    print(f"документов: {len(files)}   символов всего: {sum(doc_sizes.values())}")
+    print(f"documents: {len(files)}   characters total: {sum(doc_sizes.values())}")
 
-    print("\nпо типам:")
+    print("\nby type:")
     for lt, d in sorted(by_type.items(), key=lambda x: -x[1]["chars"]):
-        print(f"  {lt:<22} {d['n']:>4} шт   {d['chars']:>9} симв")
+        print(f"  {lt:<22} {d['n']:>4} docs {d['chars']:>9} chars")
 
-    print("\nсамые большие документы:")
+    print("\nlargest documents:")
     for law_id, n in sorted(doc_sizes.items(), key=lambda x: -x[1])[:10]:
         title = META.get(law_id, {}).get("law_title", "?")
         print(f"  {n:>8}  {law_id}  {title[:40]}")
 
-    describe("СТАТЬИ, символов", art_chars)
-    describe("ПАРАГРАФЫ, символов", par_chars)
+    describe("ARTICLES, characters", art_chars)
+    describe("PARAGRAPHS, characters", par_chars)
 
-    print(f"\nстатей-削除: {art_deleted} из {len(art_chars)} ({art_deleted / max(len(art_chars), 1) * 100:.1f}%)")
+    print(f"\n削除 articles: {art_deleted} of {len(art_chars)} ({art_deleted / max(len(art_chars), 1) * 100:.1f}%)")
     total = main_chars + suppl_chars
-    print(f"本則 {main_chars} симв / 附則 {suppl_chars} симв  →附則 = {suppl_chars / max(total, 1) * 100:.1f}%")
+    print(f"本則 {main_chars} chars / 附則 {suppl_chars} chars  →附則 = {suppl_chars / max(total, 1) * 100:.1f}%")
 
-    print("\nсамые длинные статьи:")
+    print("\nlongest articles:")
     for n, law_id, num, title, cap in sorted(big_articles, reverse=True)[:10]:
         print(f"  {n:>6}  {law_id}  {title}{cap}")
 
     # characters -> tokens on the real corpus
     sample = "".join(par_samples)
     tok = len(ENC.encode(sample))
-    print(f"\nтокенизация выборки ({len(par_samples)} параграфов, {len(sample)} симв):")
-    print(f"  токенов: {tok}   символов на токен: {len(sample) / tok:.2f}")
-    print(f"  оценка всего корпуса (本則): ~{int(main_chars / (len(sample) / tok))} токенов")
+    print(f"\ntokenising a sample ({len(par_samples)} paragraphs, {len(sample)} chars):")
+    print(f"  tokens: {tok}   chars per token: {len(sample) / tok:.2f}")
+    print(f"  whole corpus estimate (本則): ~{int(main_chars / (len(sample) / tok))} tokens")
 
     ratio = tok / len(sample)
-    print("\nпараграфы в ТОКЕНАХ (оценка через коэффициент):")
+    print("\nparagraphs in TOKENS (estimated via the ratio):")
     est = [int(c * ratio) for c in par_chars]
-    describe("ПАРАГРАФЫ, токенов", est)
+    describe("PARAGRAPHS, tokens", est)
 
 
 if __name__ == "__main__":

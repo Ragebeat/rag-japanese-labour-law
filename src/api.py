@@ -14,7 +14,7 @@ Three decisions taken up front, because retrofitting them costs more:
    finished), then tokens, then the final analysis. The user sees the sources
    before the model starts writing.
 
-4. ONE REQUEST AT A TIME, THE REST IN A BOUNDED QUEUE (phase 6, OWASP
+4. ONE REQUEST AT A TIME, THE REST IN A BOUNDED QUEUE (OWASP
    unbounded consumption). Reranking and generation saturate this machine;
    two requests in parallel are not faster, both just take twice as long.
    The queue is bounded: an unbounded one only moves the consumption into
@@ -85,7 +85,7 @@ class Line:
 async def in_thread(fn, *a, **kw):
     """Blocking work off the event loop. retrieve() is 7-13 s of reranking on
     the CPU; called straight from `async def` it froze the whole server,
-    /health included — phase 1's time.sleep, in real code.
+    /health included — the classic blocking call inside async, in real code.
 
     anyio does NOT abandon the thread on cancellation (the default): if the
     client leaves, the request waits for the thread to finish before the
@@ -115,7 +115,7 @@ app = FastAPI(title="Japanese Labour Law RAG", lifespan=lifespan)
 # needed it: in development Vite proxies /ask to this port, in a demo the
 # built front end is served from this same port. Both are same-origin. The
 # only thing "*" did was let ANY site open in the browser call this API and
-# read the answers (phase 6, OWASP review).
+# read the answers (OWASP review).
 
 
 class Ask(BaseModel):
@@ -176,7 +176,7 @@ async def ask(req: Ask):
             await line.moved()
         chunks = await in_thread(retrieve, state["rr"], req.q, req.mode, k=req.k)
         if not chunks:
-            raise HTTPException(404, "ничего не найдено")
+            raise HTTPException(404, "nothing found")
 
         r = await state["http"].post(OLLAMA, json={
             "model": MODEL,

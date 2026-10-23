@@ -12,9 +12,12 @@ META = pathlib.Path("data/meta")
 PAUSE = 1.0
 
 
-def fetch_law(law_id):
+def fetch_law(revision_id):
+    # By law_revision_id from the manifest, not by law_id: law_id returns
+    # whatever text e-Gov serves today, so a later download would silently
+    # differ from the corpus the README numbers were measured on.
     r = requests.get(
-        f"{BASE}/law_data/{law_id}",
+        f"{BASE}/law_data/{revision_id}",
         params={"law_full_text_format": "xml"},
         timeout=60,
     )
@@ -35,15 +38,15 @@ def main():
             continue
 
         try:
-            data = fetch_law(law_id)
+            data = fetch_law(rec["law_revision_id"])
             ft = data["law_full_text"]
             if not isinstance(ft, str):
-                raise ValueError(f"law_full_text не строка, а {type(ft).__name__}")
+                raise ValueError(f"law_full_text is not a string but {type(ft).__name__}")
             xml = base64.b64decode(ft).decode("utf-8")
             xml_path.write_text(xml, encoding="utf-8")
             meta = {k: v for k, v in data.items() if k != "law_full_text"}
             (META / f"{law_id}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"[{i}/{len(records)}] {law_id} {len(xml)} симв. {rec['law_title'][:30]}")
+            print(f"[{i}/{len(records)}] {law_id} {len(xml)} chars {rec['law_title'][:30]}")
         except Exception as e:
             print(f"[{i}/{len(records)}] FAIL {law_id}: {e}")
             failed.append({"law_id": law_id, "error": str(e)})
@@ -52,11 +55,11 @@ def main():
 
     if failed:
         pathlib.Path("data/failed.json").write_text(json.dumps(failed, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\nне скачано: {len(failed)} → data/failed.json")
+        print(f"\nnot downloaded: {len(failed)} → data/failed.json")
     else:
-        print(f"\nготово, файлов: {len(list(RAW.glob('*.xml')))}")
+        print(f"\ndone, files: {len(list(RAW.glob('*.xml')))}")
     if len(list(RAW.glob("*.xml"))) != len(records):
-        print("ВНИМАНИЕ: файлов меньше, чем записей в манифесте")
+        print("WARNING: fewer files than manifest records")
     if failed:
         raise SystemExit(1)
 

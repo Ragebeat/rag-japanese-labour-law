@@ -5,11 +5,11 @@ LLM will find substitutions where the dictionary is silent**. Example:
 1日何時間まで働かせていいの？ — not a single colloquial term, so the dictionary
 does not fire.
 
-Decisions carried over from phase 3:
+Decisions carried over from earlier structured-output work:
 - instructions and examples in system, the user question in user
 - structured output via format=json
 - **the schema allows an EMPTY list** — otherwise the model invents terms
-  where there are none (covered in phase 3: a schema with no field for
+  where there are none (a known failure: a schema with no field for
   "nothing found" produces fabrication instead of "I do not know")
 
 Cached to disk: 50 questions times several runs, and Ollama swaps models on
@@ -180,7 +180,7 @@ def llm_terms(query, client=None):
             clean.append(t)
         terms = clean[:MAX_TERMS]
     except Exception as e:
-        print(f"    LLM ошибка на '{query[:20]}': {e}")
+        print(f"    LLM error on '{query[:20]}': {e}")
         terms = []
     finally:
         if own:
@@ -231,7 +231,7 @@ def warm():
             if not terms:
                 empty += 1
             print(f"{i:>2}/{len(golden)} {g['q'][:26]:<28} → {terms}")
-    print(f"\nготово за {(time.time()-t0)/60:.1f} мин, пустых ответов: {empty}")
+    print(f"\ndone in {(time.time()-t0)/60:.1f} min, empty answers: {empty}")
 
 
 if __name__ == "__main__":

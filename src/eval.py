@@ -51,7 +51,7 @@ def run(idx, golden, core_only):
 def main():
     golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
     idx = Index()
-    print(f"вопросов: {len(golden)}   чанков: {len(idx.meta)} "
+    print(f"questions: {len(golden)}   chunks: {len(idx.meta)} "
           f"(core {int(idx.core_mask.sum())})\n")
 
     report = {}
@@ -59,19 +59,19 @@ def main():
         metrics, rows = run(idx, golden, core_only)
         report[mode] = {"metrics": metrics, "rows": rows}
 
-        print(f"=== режим {mode} ===")
+        print(f"=== mode {mode} ===")
         for k, v in metrics.items():
             print(f"  {k:<10} {v:.3f}")
 
         miss = [r for r in rows if r["pos"] is None]
         far = [r for r in rows if r["pos"] and r["pos"] > 5]
-        print(f"  не нашлось в топ-10: {len(miss)}")
+        print(f"  not in the top 10: {len(miss)}")
         for r in miss:
             print(f"     #{r['id']:>2} {r['q'][:34]:<34} → {r['top1']}")
         if far:
-            print(f"  нашлось позже 5-го: {len(far)}")
+            print(f"  found below rank 5: {len(far)}")
             for r in far:
-                print(f"     #{r['id']:>2} позиция {r['pos']:>2}  {r['q'][:30]}")
+                print(f"     #{r['id']:>2} rank {r['pos']:>2}  {r['q'][:30]}")
         print()
 
     OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2),

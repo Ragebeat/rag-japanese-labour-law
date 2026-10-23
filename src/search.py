@@ -26,7 +26,7 @@ class Index:
         self.meta = [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
         self.vecs = np.load(VECTORS)
         assert len(self.meta) == len(self.vecs), (
-            f"чанков {len(self.meta)}, векторов {len(self.vecs)} — рассогласованы"
+            f"{len(self.meta)} chunks, {len(self.vecs)} vectors — out of sync"
         )
         self.core_mask = np.array([c["core"] for c in self.meta])
         self._client = httpx.Client()
@@ -57,8 +57,8 @@ def main():
 
     idx = Index()
     n = int(idx.core_mask.sum()) if core_only else len(idx.meta)
-    print(f"запрос: {query}")
-    print(f"режим: {'core' if core_only else 'all'} ({n} чанков)\n")
+    print(f"query: {query}")
+    print(f"mode: {'core' if core_only else 'all'} ({n} chunks)\n")
 
     for rank, (score, c) in enumerate(idx.search(query, k=10,
                                                  core_only=core_only), 1):

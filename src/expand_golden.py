@@ -47,9 +47,9 @@ REVIEW = DATA / "golden_review.md"
 # covering them would need a rule B, which legitimises any retrofitted
 # expansion. We report them on a separate line instead of tuning the metric.
 DISPUTED = {
-    20: "育介法17条 (制限) против 育介則76条; сам вопрос спорен — в 育休 не работают",
-    24: "労契法18条 даёт 無期転換 ≠ 正社員; パート有期法13条 про 転換措置",
-    38: "派遣法40条の6 = みなし при незаконном派遣; 40条の4 = обычный путь",
+    20: "育介法17条 (制限) vs 育介則76条; the question itself is disputable — no one works during 育休",
+    24: "労契法18条 gives 無期転換 ≠ 正社員; パート有期法13条 is about 転換措置",
+    38: "派遣法40条の6 = みなし on unlawful 派遣; 40条の4 = the regular path",
 }
 
 # Ordinances the "X施行規則" pattern does not catch.
@@ -126,10 +126,10 @@ def main():
         if additions:
             added_total += len(additions)
             review.append(f"### #{g['id']} {g['q']}\n")
-            review.append(f"было: {g['relevant']}\n")
+            review.append(f"was: {g['relevant']}\n")
             for pair, n_ref, cap in additions:
                 review.append(
-                    f"- [ ] `{laws[pair[0]]} {pair[1]}` родителей:{n_ref}  {cap}")
+                    f"- [ ] `{laws[pair[0]]} {pair[1]}` parents:{n_ref}  {cap}")
             review.append("")
             g["relevant"] = g["relevant"] + [p for p, _, _ in additions]
 
@@ -139,32 +139,32 @@ def main():
 
     touched = sum(1 for r in review if r.startswith("### "))
     head = [
-        "# Предложение по расширению golden (правило A)",
+        "# Proposed golden-set expansion (rule A)",
         "",
-        f"Режим: {'ссылка только в заголовке' if caption_only else 'заголовок + тело'}",
-        f"Максимум родительских ссылок: {max_parents}",
-        f"Затронуто вопросов: {touched} из {len(golden)}",
-        f"Добавлено статей: {added_total}",
+        f"Mode: {'reference in the caption only' if caption_only else 'caption + body'}",
+        f"Maximum parent references: {max_parents}",
+        f"Questions affected: {touched} of {len(golden)}",
+        f"Articles added: {added_total}",
         "",
-        "Отметить галочкой те, что по существу отвечают на вопрос. "
-        "Правило задаёт границу поиска, не отменяет проверку.",
+        "Tick the ones that actually answer the question. "
+        "The rule bounds the search; it does not replace the check.",
         "",
-        f"Спорные (правилу A не подчиняются, метрика отдельной строкой): "
+        f"Disputed (outside rule A, reported on a separate line): "
         f"{sorted(DISPUTED)}",
         "",
     ]
     if hubs:
-        head += ["## Отсеяно как втулки (ссылаются слишком на многое)", ""]
-        head += [f"- {k} — родителей: {v}"
+        head += ["## Filtered out as hubs (reference too many articles)", ""]
+        head += [f"- {k} — parents: {v}"
                  for k, v in sorted(hubs.items(), key=lambda kv: -kv[1])[:15]]
         head += [""]
     REVIEW.write_text("\n".join(head + review), encoding="utf-8")
 
-    print(f"вопросов затронуто: {touched}/{len(golden)}")
-    print(f"статей добавлено:   {added_total}")
-    print(f"отсеяно втулок:     {len(hubs)}")
+    print(f"questions affected: {touched}/{len(golden)}")
+    print(f"articles added:     {added_total}")
+    print(f"hubs filtered out:  {len(hubs)}")
     print(f"→ {REVIEW}")
-    print(f"→ {PROPOSED}   (golden.jsonl НЕ тронут)")
+    print(f"→ {PROPOSED}   (golden.jsonl NOT modified)")
 
 
 if __name__ == "__main__":

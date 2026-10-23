@@ -27,39 +27,12 @@ from tokenize_ja import tokenize  # noqa: E402
 from query_expand import expand  # noqa: E402
 from query_llm import expand_llm, expand_combo  # noqa: E402
 
-def _load_env():
-    """Reads .env from the project root without overriding existing variables.
-
-    The IDE used to load .env; from a bare terminal everything failed with
-    fe_sendauth: no password supplied. Depending on where a script is launched
-    from is no basis for reproducible measurements.
-
-    No python-dotenv: one dependency for ten lines is not worth it.
-    """
-    path = pathlib.Path(__file__).resolve().parent.parent / ".env"
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip().strip("\"'"))
-
-
-_load_env()
-
-DSN = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://rag:{}@localhost:5433/ragdb".format(
-        os.environ.get("POSTGRES_PASSWORD", "")
-    ),
-)
+from env import DSN  # noqa: E402  (.env is loaded there)
 
 MODEL = "bge-m3"
 OLLAMA = "http://localhost:11434/api/embed"
 
-# Phase 7: the embedding model is a choice, not a constant. Bare vector
+# The embedding model is a choice, not a constant. Bare vector
 # recall@5 on golden: bge-m3 0.68, ruri-v3-310m 0.86 (embed_compare.py).
 # Each embedder has its own column; the default comes from EMBEDDER so the
 # whole pipeline switches with one knob, and it goes into the run fingerprint.
@@ -71,7 +44,7 @@ EMBEDDERS = {
                      # documents were encoded with "検索文書: " (embed_ruri.py)
                      "query_prefix": "検索クエリ: "},
 }
-# Default since phase 7 (sweep.py --ruri): full pipeline r@5 0.94 without
+# Default (sweep.py --ruri): full pipeline r@5 0.94 without
 # query expansion vs 0.86 for BGE-M3 with it. EMBEDDER=bge-m3 switches back.
 EMBEDDER = os.environ.get("EMBEDDER", "ruri-v3-310m")
 _st = {}             # in-process models, loaded once per process
@@ -81,7 +54,7 @@ def _st_model(name):
     if name not in _st:
         from sentence_transformers import SentenceTransformer
         cfg = EMBEDDERS[name]
-        print(f"загрузка {cfg['hf']}...", file=sys.stderr)
+        print(f"loading {cfg['hf']}...", file=sys.stderr)
         _st[name] = SentenceTransformer(cfg["hf"], device="cpu",
                                         revision=cfg["revision"])
     return _st[name]
@@ -95,7 +68,7 @@ POOL = 50          # how many we take from each method before fusion
 #   ef_search=400            -> the same, no further gain
 # The default drops results SILENTLY — no error, no warning.
 #
-# Phase 7, Ruri v3 (embed_ruri.py check, golden queries, core, top-20 overlap
+# Ruri v3 (embed_ruri.py check, golden queries, core, top-20 overlap
 # with the exact scan):  ef 40 -> 0.914 (worst 0.25) · 100 -> 0.973 (worst
 # 0.75) · 200 -> 0.998 · 400 -> 0.999. The value tuned on BGE-M3 loses 3% of
 # Ruri's pool, up to a quarter on one question: a different model is a
@@ -264,9 +237,9 @@ def main():
     query = " ".join(a for a in args if not a.startswith("--"))
 
     h = Hybrid()
-    print(f"запрос: {query}")
-    print(f"токены: {tokenize(query)}")
-    print(f"режим: {mode}" + (" / core" if core_only else "") + "\n")
+    print(f"query: {query}")
+    print(f"tokens: {tokenize(query)}")
+    print(f"mode: {mode}" + (" / core" if core_only else "") + "\n")
 
     for i, r in enumerate(h.search(query, 10, core_only, mode), 1):
         pos = ""

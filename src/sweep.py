@@ -27,33 +27,33 @@ BEST = dict(mode="vector", expand_query=True, narrow=True, combo=True)
 
 CONFIGS = [
     ("vector", dict(mode="vector"),
-     "исходная база 0.68"),
-    ("словарь+LLM", BEST,
-     "текущий лидер 0.82"),
+     "original baseline 0.68"),
+    ("dict+LLM", BEST,
+     "current leader 0.82"),
     ("+rerank orig", dict(**BEST, rerank=True, rerank_on="original"),
-     "cross-encoder по ИСХОДНОМУ вопросу"),
+     "cross-encoder on the ORIGINAL question"),
     ("+rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
-     "cross-encoder по расширенному"),
+     "cross-encoder on the expanded one"),
     ("+rerank pool40", dict(**BEST, rerank=True, rerank_on="original",
                             pool=40),
-     "40 кандидатов вместо 20"),
-    # Phase 6: the trace showed the reranker takes ~88% of retrieval (about
-    # 0.4-0.6 s per pair on the CPU). Phase 4 only tried a LARGER pool; the
+     "40 candidates instead of 20"),
+    # The trace showed the reranker takes ~88% of retrieval (about
+    # 0.4-0.6 s per pair on the CPU). The first sweep only tried a LARGER pool; the
     # cheap lever is a smaller one — if recall holds.
     ("+rerank exp pool15", dict(**BEST, rerank=True, rerank_on="expanded",
                                 pool=15),
-     "15 кандидатов — реранк на четверть дешевле"),
+     "15 candidates — reranking a quarter cheaper"),
     ("+rerank exp pool10", dict(**BEST, rerank=True, rerank_on="expanded",
                                 pool=10),
-     "10 кандидатов — реранк вдвое дешевле"),
+     "10 candidates — reranking half the cost"),
 ]
 
 # --pool runs only the working configuration against its smaller pools, and
-# writes its own report: sweep.json is phase 4's record.
+# writes its own report: sweep.json is the original record.
 POOL_SET = ("+rerank exp", "+rerank exp pool15", "+rerank exp pool10")
 OUT_POOL = ROOT / "data" / "sweep_pool.json"
 
-# --ruri (phase 7): level 2 of the embedding comparison — Ruri in the full
+# --ruri: level 2 of the embedding comparison — Ruri in the full
 # pipeline. The expansion dictionary was written against BGE-M3's misses, so
 # the question is not only "how high" but "is expansion still worth an LLM
 # call": compare "ruri +rerank orig" (no expansion anywhere) with
@@ -62,15 +62,15 @@ OUT_POOL = ROOT / "data" / "sweep_pool.json"
 RURI = "ruri-v3-310m"
 RURI_CONFIGS = [
     ("bge +rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
-     "рабочая конфигурация на BGE-M3 — отсчёт", "bge-m3"),
+     "working configuration on BGE-M3 — the reference", "bge-m3"),
     ("ruri vector", dict(mode="vector"),
-     "голая Ruri, должна дать 0.86 (как embed_compare)", RURI),
-    ("ruri +словарь+LLM", BEST,
-     "расширение без реранкера", RURI),
+     "bare Ruri, should give 0.86 (as in embed_compare)", RURI),
+    ("ruri +dict+LLM", BEST,
+     "expansion without the reranker", RURI),
     ("ruri +rerank orig", dict(mode="vector", rerank=True, rerank_on="original"),
-     "реранкер без расширения — ни одного вызова LLM", RURI),
+     "reranker without expansion — no LLM calls at all", RURI),
     ("ruri +rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
-     "рабочая конфигурация на Ruri", RURI),
+     "working configuration on Ruri", RURI),
 ]
 OUT_RURI = ROOT / "data" / "sweep_ruri.json"
 
@@ -96,7 +96,7 @@ def run(h, rr, golden, kw):
                      "pos": first_hit(res, g["relevant"])})
         # A reranked config takes ~10 minutes with no output otherwise —
         # indistinguishable from a hang.
-        print(f"  {j}/{len(golden)}  {time.time() - t0:.0f}с", end="\r",
+        print(f"  {j}/{len(golden)}  {time.time() - t0:.0f}s", end="\r",
               file=sys.stderr, flush=True)
     n = len(rows)
     return {
@@ -123,9 +123,9 @@ def main():
         base = [c for c in CONFIGS if c[0] in POOL_SET] if only_pool else CONFIGS
         configs = [(n, kw, note, h) for n, kw, note in base]
         out = OUT_POOL if only_pool else OUT
-    print(f"вопросов: {len(golden)}, срез core, база recall@5 = {BASELINE}\n")
-    print(f"{'конфиг':<20} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
-          f"{'MRR':>6} {'сек':>6}  {'вs базы':>8}")
+    print(f"questions: {len(golden)}, core slice, baseline recall@5 = {BASELINE}\n")
+    print(f"{'config':<20} {'r@1':>6} {'r@3':>6} {'r@5':>6} {'r@10':>6} "
+          f"{'MRR':>6} {'sec':>6}  {'vs base':>8}")
     print("-" * 78)
 
     report = {}
@@ -135,23 +135,23 @@ def main():
                         "embedder": eng.embedder,
                         "note": note, "metrics": m, "rows": rows}
         delta = m["recall@5"] - BASELINE
-        mark = "" if abs(delta) >= 0.02 else "  (шум)"
+        mark = "" if abs(delta) >= 0.02 else "  (noise)"
         print(f"{name:<20} {m['recall@1']:>6.3f} {m['recall@3']:>6.3f} "
               f"{m['recall@5']:>6.3f} {m['recall@10']:>6.3f} "
               f"{m['MRR']:>6.3f} {m['sec']:>6.3f}  {delta:>+8.3f}{mark}")
         print(f"{'':20} └ {note}")
 
     best = max(report.items(), key=lambda kv: kv[1]["metrics"]["recall@5"])
-    print(f"\nлучший: {best[0]} — recall@5 = "
+    print(f"\nbest: {best[0]} — recall@5 = "
           f"{best[1]['metrics']['recall@5']:.3f}")
     if best[1]["metrics"]["recall@5"] - BASELINE < 0.02:
-        print("⚠️ выигрыш меньше 0.02 — в пределах шума на 50 вопросах")
+        print("⚠️ the gain is below 0.02 — within the noise on 50 questions")
 
     # what exactly the query expansion fixed
     def ok(p):
         return p is not None and p <= 5
 
-    for pair in (("словарь+LLM", "+rerank orig"),
+    for pair in (("dict+LLM", "+rerank orig"),
                  ("+rerank orig", "+rerank exp"),
                  ("+rerank orig", "+rerank pool40"),
                  ("+rerank exp", "+rerank exp pool15"),
@@ -165,7 +165,7 @@ def main():
         qs = {r["id"]: r["q"] for r in report[pair[0]]["rows"]}
         fixed = [i for i in qs if not ok(a[i]) and ok(b[i])]
         broke = [i for i in qs if ok(a[i]) and not ok(b[i])]
-        print(f"\n{pair[0]} → {pair[1]}:  починил {len(fixed)}, сломал {len(broke)}")
+        print(f"\n{pair[0]} → {pair[1]}:  fixed {len(fixed)}, broke {len(broke)}")
         for i in fixed:
             print(f"   + #{i:>2} {qs[i][:34]:<36} {a[i]} → {b[i]}")
         for i in broke:

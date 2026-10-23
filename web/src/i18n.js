@@ -1,5 +1,5 @@
-// Подписи интерфейса. Вопросы-примеры остаются японскими в обоих режимах —
-// это содержимое, а не интерфейс.
+// Interface labels. Example questions stay Japanese in both languages —
+// they are content, not interface.
 export const LANGS = ["ja", "ru"];
 
 export const T = {

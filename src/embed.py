@@ -41,10 +41,10 @@ def embed_batch(client, texts):
 
         if attempt < RETRIES - 1:
             delay = 2 ** attempt + random.random()
-            print(f"    повтор {attempt + 1}/{RETRIES - 1} через {delay:.1f}с — {last}")
+            print(f"    retry {attempt + 1}/{RETRIES - 1} in {delay:.1f}s — {last}")
             time.sleep(delay)
 
-    raise RuntimeError(f"батч не взялся за {RETRIES} попыток: {last}")
+    raise RuntimeError(f"batch failed after {RETRIES} attempts: {last}")
 
 
 def main():
@@ -56,21 +56,26 @@ def main():
             texts.append(c["text"])
             ids.append(c["chunk_id"])
     n = len(texts)
-    print(f"чанков: {n}")
-
-    # memmap to disk — 20162 x 1024 x 4 bytes ~ 80 MB
-    mode = "r+" if VECTORS.exists() else "w+"
-    vecs = np.lib.format.open_memmap(VECTORS, mode=mode, dtype=np.float32,
-                                     shape=(n, DIM))
+    print(f"chunks: {n}")
 
     done = 0
     if STATE.exists():
         st = json.loads(STATE.read_text(encoding="utf-8"))
         if st.get("n") == n:
             done = st.get("done", 0)
-            print(f"продолжаем с {done}")
+            print(f"resuming from {done}")
         else:
-            print("корпус изменился — считаем заново")
+            print("the corpus changed — starting over")
+    # Resume only into a file of the right shape. "r+" ignores the shape
+    # argument, so a file left by a different corpus kept its old row count:
+    # the vectors were recomputed, the stale tail rows were not dropped.
+    if done and VECTORS.exists() and np.load(VECTORS, mmap_mode="r").shape != (n, DIM):
+        print("vectors.npy has a different shape — starting over")
+        done = 0
+
+    # memmap to disk — 20162 x 1024 x 4 bytes ~ 80 MB
+    vecs = np.lib.format.open_memmap(VECTORS, mode="r+" if done else "w+",
+                                     dtype=np.float32, shape=(n, DIM))
 
     t0 = time.time()
     with httpx.Client() as client:
@@ -87,7 +92,7 @@ def main():
                 el = time.time() - t0
                 rate = (done - (n - (n - done)) if False else done) / max(el, 1e-6)
                 eta = (n - done) / max(rate, 1e-6)
-                print(f"{done}/{n}  {rate:.1f} чанк/с  ETA {eta/60:.1f} мин")
+                print(f"{done}/{n}  {rate:.1f} chunks/s  ETA {eta/60:.1f} min")
 
     vecs.flush()
     STATE.write_text(json.dumps({"n": n, "done": n}), encoding="utf-8")
@@ -96,9 +101,9 @@ def main():
         json.dumps(ids, ensure_ascii=False), encoding="utf-8")
 
     norms = np.linalg.norm(np.asarray(vecs[:100]), axis=1)
-    print(f"\nготово. форма {vecs.shape}")
-    print(f"нормы первых 100: min {norms.min():.4f}  max {norms.max():.4f}")
-    print(f"время: {(time.time() - t0)/60:.1f} мин")
+    print(f"\ndone. shape {vecs.shape}")
+    print(f"norms of the first 100: min {norms.min():.4f}  max {norms.max():.4f}")
+    print(f"time: {(time.time() - t0)/60:.1f} min")
 
 
 if __name__ == "__main__":

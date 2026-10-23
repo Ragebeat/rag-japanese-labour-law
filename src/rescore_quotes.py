@@ -55,7 +55,7 @@ def main():
     for r in rows:
         body = VERDICT_RE.sub("", r["answer"]).strip()
         r.update(check_quotes(body, rebuild(r["context"], arts)))
-    print(f"пересчёт: {path.name} ({'базовый промпт' if base else 'промпт с цитатами'})")
+    print(f"re-scoring: {path.name} ({'base prompt' if base else 'quote prompt'})")
     quote_summary(rows)
 
 

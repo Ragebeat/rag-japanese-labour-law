@@ -13,7 +13,7 @@ number for human readers, and that is verified a second, independent way.
   python src/generate.py "有給って入社してすぐもらえるの？"
   python src/generate.py --sample     # 5 questions raw, to read by eye
   python src/generate.py --eval       # run over the golden set
-  python src/generate.py --eval --base     # the phase 4 prompt, without verbatim quotes
+  python src/generate.py --eval --base     # the original prompt, without verbatim quotes
 
 Every --eval is also logged to data/runs.jsonl with a configuration
 fingerprint; src/compare.py diffs any two runs.
@@ -53,7 +53,7 @@ DEFAULT_MODE = "whole"
 def report_path(mode, kind=""):
     """Reports are named after the assembly mode — otherwise, a month later,
     there is no telling which configuration produced which numbers. The cost
-    of that confusion is known: all of session 8 was measured on dedupe and
+    of that confusion is known: one whole series of runs was measured on dedupe and
     had to be re-measured.
     """
     return ROOT / "data" / f"gen_report{kind}_{mode}.json"
@@ -65,7 +65,7 @@ TOP_K = 5
 REFUSAL = "該当する規定が見つかりません"
 
 # ⚠️ The format examples contain NO real articles or terms from the golden set.
-# Lesson from session 5: an example in the prompt becomes a template.
+# An example in the prompt becomes a template.
 #
 # The 「判定:」 line was added after the first run: in prose the model
 # expressed refusal in ten different phrasings and never once cleanly.
@@ -89,7 +89,7 @@ SYSTEM_BASE = f"""あなたは日本の労働法令の検索結果を要約す�
 4. 数字・日数・金額は条文にある通りに引用する。推測しない
 5. 本文は3〜5文で簡潔に"""
 
-# Phase 6: the verbatim-quote variant. Five answers in phase 5 had the right
+# The verbatim-quote variant. Five answers in earlier runs had the right
 # article and a wrong detail; the one class this makes CHECKABLE is a quote
 # that is not really a quote (two exceptions spliced into one, text put under
 # another article's number). The check sees only what is inside 「」:
@@ -104,16 +104,16 @@ SYSTEM_QUOTES = SYSTEM_BASE + """
 8. 条文に（第N項）の印がある場合、根拠の項まで書く。形式:「[N] ◯◯法 第N条第N項」
    項の番号は必ず（第N項）の印から取る。段落を数えて推測しない"""
 
-# The default since phase 6 (29.09), measured on golden against the base
+# The default since 29.09 (on BGE-M3), measured on golden against the base
 # prompt: claim coverage 0.09 -> 0.68, answers with numbers outside quotes
 # 22 -> 11, over-refusal 0 -> 0, refusal on retrieval miss 0.17 -> 0.17 (the
 # same five blind answers). One suspected regression: #26 dropped the key
 # article (労契法 第十条) — one case, not separable from run-to-run noise.
-# SYSTEM_BASE stays: the phase 4 ablation is paired with a base-prompt report.
+# SYSTEM_BASE stays: the source-removal ablation is paired with a base-prompt report.
 SYSTEM = SYSTEM_QUOTES
 
 # Generation options — ONE copy, imported by api.py. The first num_ctx fix
-# (phase 6) patched generate() and missed api.py's two own requests: three
+# patched generate() and missed api.py's two own requests: three
 # copies of the same dict, one of them updated.
 #
 # num_ctx is explicit on purpose. check_ctx.py: prompts run up to ~7 000
@@ -124,7 +124,7 @@ SYSTEM = SYSTEM_QUOTES
 # reloads the model on every switch between the two.
 GEN_OPTIONS = {"temperature": 0, "num_ctx": 32_768}
 
-# ── run registry (phase 6) ──
+# ── run registry ──
 # On 29.09 every --eval needed a manual Copy-Item first, or the new report
 # overwrote the one to compare against — and the comparison itself was done
 # by reading two JSON files. Now each run is kept under a fingerprint of
@@ -142,7 +142,7 @@ def run_config(system, mode):
     """Everything that shapes an answer, read from the modules themselves —
     not retyped here, or this would become a fourth copy that drifts.
     The expander model is in: switching it (qwen → gemma) moved reranker
-    scores enough to break a phase 5 "finding"."""
+    scores enough to break an earlier "finding"."""
     import query_llm
     import rerank
     return {
@@ -228,7 +228,7 @@ def log_run(rows, system, mode, label):
              "metrics": run_metrics(rows)}
     with RUNS_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"→ прогон записан: {label} · отпечаток {fp} · {entry['git']} · {path.name}")
+    print(f"→ run logged: {label} · fingerprint {fp} · {entry['git']} · {path.name}")
     return entry
 
 
@@ -274,7 +274,7 @@ def term_hint(query):
 
 
 def generate(query, chunks, client=None, system=SYSTEM, builder=None):
-    # builder: an alternative context format (phase 6 injection test wraps
+    # builder: an alternative context format (injection_test.py wraps
     # documents in <document> tags). Default: build_context.
     own = client is None
     client = client or httpx.Client()
@@ -375,7 +375,7 @@ def inspect(answer, chunks):
     }
 
 
-# ── verbatim quote check (phase 6) ──
+# ── verbatim quote check ──
 # Minimum 4 characters: a shorter 「」 is a term the answer brackets for
 # emphasis (「労働者」), not a quote.
 # ANY_QUOTE_RE only cuts quotes out when looking for numbers. Quotes
@@ -492,8 +492,8 @@ def check_quotes(body, chunks):
 
     Checked against the sentence's own [N] chunks, not the whole context:
     otherwise text of one article quoted under another's number would pass
-    (phase 5, case 5). found_in says where the text really is — non-empty
-    means "real text, wrong number", empty means "not a real quote" (case 4).
+    (a real case from earlier runs). found_in says where the text really is — non-empty
+    means "real text, wrong number", empty means "not a real quote".
     """
     texts = [_norm(c["text"].split("\n", 1)[-1]) for c in chunks]
 
@@ -513,7 +513,7 @@ def check_quotes(body, chunks):
 
     # Two coverages, because verbatim-ness alone rewards NOT quoting. The
     # first test answer quoted the undisputed sentence and paraphrased the
-    # exceptions — the phase 5 splice again, outside the quotes — while
+    # exceptions — the splice described above, again, outside the quotes — while
     # reporting "0 non-verbatim". And sentence coverage alone rewards a
     # token quote: 「妊娠したこと」 in brackets, the claim itself paraphrased.
     # So: claims_quoted (sentences with a verbatim quote) AND quoted_chars
@@ -572,7 +572,7 @@ def check_quotes(body, chunks):
 
 # ──────────────────────────────────── cli ────────────────────────────────────
 
-# Phase 7: Ruri, no query expansion. sweep.py --ruri, r@5 on golden:
+# Ruri, no query expansion. sweep.py --ruri, r@5 on golden:
 # with expansion 0.96, without 0.94 — one question net (+2 −1), noise.
 # Expansion was dropped because the dictionary was written against golden's
 # own misses (its gain there is optimistic), and it costs an LLM call per
@@ -641,9 +641,9 @@ def whole_article(c, arts):
     total = sum(p["n_chars"] for p in parts)
     if len(parts) == 1 or total > ARTICLE_CAP:
         return c
-    # Paragraph labels (phase 6). The chunk header carries 「第N項」, but
+    # Paragraph labels. The chunk header carries 「第N項」, but
     # only the body went into the context: the model never saw paragraph
-    # numbers and had to count paragraphs itself (phase 5: 時季変更権 put
+    # numbers and had to count paragraphs itself (an earlier run put 時季変更権
     # under 第3項 — it is 第5項). Labels also give check_quotes a map to
     # verify that a quote sits in the paragraph the answer names.
     labelled = len({p.get("paragraph_num") for p in parts}) > 1
@@ -713,33 +713,33 @@ def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):
 
             print("=" * 72)
             print(f"#{g['id']}  {g['q']}")
-            print("— контекст —")
+            print("— context —")
             for i, c in enumerate(ch, 1):
                 print(f"  [{i}] {c['law_title'][:22]} {c['article_title']}"
                       f"{c['article_caption'] or ''}")
-            print("— ответ —")
+            print("— answer —")
             print(ans)
-            print("— разбор —")
+            print("— analysis —")
             v = {"ok": "回答可能", "no": "回答不可",
-                 None: "НЕТ ВЕРДИКТА"}[info["verdict"]]
+                 None: "NO VERDICT"}[info["verdict"]]
             print(f"  判定: {v}"
-                  f"{' (не на первой строке)' if info['verdict_misplaced'] else ''}")
-            print(f"  маркеры {info['marks']}  статьи {info['cited']}")
+                  f"{' (not on the first line)' if info['verdict_misplaced'] else ''}")
+            print(f"  markers {info['marks']}  articles {info['cited']}")
             if info["transitive"]:
-                print(f"  ↳ транзитивные отсылки: {info['transitive']}")
+                print(f"  ↳ transitive references: {info['transitive']}")
             if info["bad_marks"]:
-                print(f"  ❌ маркер вне диапазона: {info['bad_marks']}")
+                print(f"  ❌ marker out of range: {info['bad_marks']}")
             if info["bad_arts"]:
-                print(f"  ❌ статья не из контекста: {info['bad_arts']}")
+                print(f"  ❌ article not in the context: {info['bad_arts']}")
             if info["partial_refusal"]:
-                print("  ⚠ отказ неполный: 回答不可, а ссылки есть")
+                print("  ⚠ incomplete refusal: 回答不可, yet citations present")
             if info["hedged"] and info["verdict"] == "ok":
-                print("  ⚠ перестраховка: 回答可能, но в тексте оговорка")
+                print("  ⚠ hedged: 回答可能, but the text hedges")
             print_quotes(info)
             print()
 
 
-# ── output guard: links (phase 6) ──
+# ── output guard: links ──
 # The injection test: a poisoned document made the model append the
 # attacker's link 4-8 times out of 8 under every prompt defence — and one
 # sentence of stronger wording beat delimiting and escaping, 8/8. Only a
@@ -804,20 +804,20 @@ class StreamGuard:
 
 def print_quotes(info):
     if info["claims"]:
-        print(f"  утверждений с [N]: {info['claims']}, с дословной цитатой: "
-              f"{info['claims_quoted']}  ← остальные непроверяемы")
+        print(f"  claims with [N]: {info['claims']}, with a verbatim quote: "
+              f"{info['claims_quoted']}  ← the rest cannot be checked")
     if info["quotes"] or info["quote_loose"]:
-        print(f"  цитат с [N]: {info['quotes']}, из них не дословных: "
-              f"{len(info['quote_bad'])}; без [N]: {len(info['quote_loose'])}")
+        print(f"  quotes with [N]: {info['quotes']}, not verbatim: "
+              f"{len(info['quote_bad'])}; without [N]: {len(info['quote_loose'])}")
     for b in info["quote_bad"]:
-        real = (f" → текст на самом деле в [{','.join(map(str, b['found_in']))}]"
-                if b["found_in"] else " → ни в одной статье")
+        real = (f" → the text is actually in [{','.join(map(str, b['found_in']))}]"
+                if b["found_in"] else " → in no article")
         print(f"  ❌ [{','.join(map(str, b['n']))}]「{b['quote'][:50]}」{real}")
     if info["num_unquoted"]:
-        print(f"  ⚠ числа вне цитат: {info['num_unquoted']}")
+        print(f"  ⚠ numbers outside quotes: {info['num_unquoted']}")
     for b in info.get("para_bad", []):
-        print(f"  ❌ [{b['n']}] указан 第{','.join(map(str, b['cited']))}項, "
-              f"а цитата в 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
+        print(f"  ❌ [{b['n']}] cites 第{','.join(map(str, b['cited']))}項, "
+              f"but the quote is in 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
 
 
 def quote_summary(rows):
@@ -833,34 +833,34 @@ def quote_summary(rows):
     ncq = sum(r_["claims_quoted"] for r_ in answered)
     cc = sum(r_["claim_chars"] for r_ in answered)
     qc = sum(r_["quoted_chars"] for r_ in answered)
-    print(f"\nцитаты: {nq} в {sum(1 for r_ in answered if r_['quotes'])}/{len(answered)} ответах")
+    print(f"\nquotes: {nq} in {sum(1 for r_ in answered if r_['quotes'])}/{len(answered)} answers")
     if nc:
         # Read coverage BEFORE verbatim-ness: high verbatim-ness with low
         # coverage means the model quotes only what is easy to quote.
-        print(f"  покрытие утверждений: {ncq}/{nc} = {ncq / nc:.2f}  "
-              f"предложение с [N] и хотя бы одной дословной цитатой")
-        print(f"  покрытие текста:      {qc}/{cc} = {qc / cc:.2f}  "
-              f"доля символов утверждений внутри дословных цитат")
+        print(f"  claim coverage:       {ncq}/{nc} = {ncq / nc:.2f}  "
+              f"a sentence with [N] and at least one verbatim quote")
+        print(f"  text coverage:        {qc}/{cc} = {qc / cc:.2f}  "
+              f"share of claim characters inside verbatim quotes")
         vc = sum(r_.get("verbatim_chars", 0) for r_ in answered)
         tc = sum(r_.get("content_chars", 0) for r_ in answered)
         if tc:
-            print(f"  дословно из источника: {vc}/{tc} = {vc / tc:.2f}  "
-                  f"текст утверждений, совпадающий с статьёй кусками от {MIN_RUN} символов, с кавычками или без")
+            print(f"  verbatim from source: {vc}/{tc} = {vc / tc:.2f}  "
+                  f"claim text matching the article in runs of {MIN_RUN}+ characters, quoted or not")
     if nq:
-        print(f"  дословных:            {nq - len(bads)}/{nq} = {(nq - len(bads)) / nq:.2f}")
-    print(f"  не из своей [N]:      {len(bads)}  (текст есть под другим номером: {len(moved)})")
-    print(f"  цитат в предложениях без [N]: {sum(len(r_['quote_loose']) for r_ in answered)}")
-    print(f"  ответов с числом вне цитат: {sum(1 for r_ in answered if r_['num_unquoted'])}")
+        print(f"  verbatim:             {nq - len(bads)}/{nq} = {(nq - len(bads)) / nq:.2f}")
+    print(f"  not from its own [N]: {len(bads)}  (text found under another number: {len(moved)})")
+    print(f"  quotes in sentences without [N]: {sum(len(r_['quote_loose']) for r_ in answered)}")
+    print(f"  answers with a number outside quotes: {sum(1 for r_ in answered if r_['num_unquoted'])}")
     # ── paragraphs: does the quote sit in the 項 the answer names ──
     npc = sum(r_.get("para_claims", 0) for r_ in answered)
     pbad = [(r_, b) for r_ in answered for b in r_.get("para_bad", [])]
-    print(f"  утверждений с указанным 項: {npc}; цитата не в указанном 項: {len(pbad)}")
+    print(f"  claims naming a 項: {npc}; quote not in the named 項: {len(pbad)}")
     for r_, b in pbad:
-        print(f"  #{r_['id']} [{b['n']}] указан 第{','.join(map(str, b['cited']))}項 "
-              f"→ в 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
+        print(f"  #{r_['id']} [{b['n']}] cites 第{','.join(map(str, b['cited']))}項 "
+              f"→ in 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
     for r_, b in bads:
-        real = (f" → в [{','.join(map(str, b['found_in']))}]" if b["found_in"]
-                else " → нигде")
+        real = (f" → in [{','.join(map(str, b['found_in']))}]" if b["found_in"]
+                else " → nowhere")
         print(f"  #{r_['id']} [{','.join(map(str, b['n']))}]{real}  「{b['quote'][:40]}」")
 
 
@@ -869,7 +869,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     r = Reranked()
     rows = []
     system = SYSTEM_QUOTES if quotes else SYSTEM_BASE
-    print(f"сборка контекста: {mode}{' · промпт с цитатами' if quotes else ''}\n")
+    print(f"context assembly: {mode}{' · quote prompt' if quotes else ''}\n")
     with httpx.Client() as cl:
         for i, g in enumerate(golden, 1):
             # One trace per golden question: retrieval and generation nest
@@ -895,7 +895,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
                          "n_context": len(ch),
                          "context": [f"{c['law_id']} {c['article_title']}" for c in ch],
                          **info})
-            flag = {"no": "НЕТ", "ok": "   ", None: " ? "}[info["verdict"]]
+            flag = {"no": " NO", "ok": "   ", None: " ? "}[info["verdict"]]
             if info["bad_arts"] or info["bad_marks"]:
                 flag = flag[:2] + "❌"
             print(f"{i:>2}/{len(golden)} {'hit ' if hit else 'MISS'} {flag} {g['q'][:26]}")
@@ -910,17 +910,17 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     trans = [r_ for r_ in rows if r_["transitive"]]
     with_cit = [r_ for r_ in rows if r_["citation_validity"] is not None]
 
-    print(f"\nвсего:                 {n}")
-    print(f"без вердикта:         {len(novrd):>3}   ← контракт формата сломан")
-    print(f"回答不可 (отказ):       {len(refus):>3}   из них чистых {len(clean)}")
-    print(f"перестраховка:         {len(hedge):>3}   回答可能 + оговорка в тексте")
-    print(f"ответов без маркера:   {len(no_mark):>3}")
-    print(f"транзитивных отсылок: {len(trans):>3}   статья из тела чанка, не источник")
-    print(f"выдуманных ссылок:    {len(bad):>3}")
+    print(f"\ntotal:                {n}")
+    print(f"no verdict:           {len(novrd):>3}   ← format contract broken")
+    print(f"回答不可 (refusal):    {len(refus):>3}   of them clean {len(clean)}")
+    print(f"hedged:               {len(hedge):>3}   回答可能 + a hedge in the text")
+    print(f"answers with no marker: {len(no_mark):>3}")
+    print(f"transitive references: {len(trans):>3}   article named in a chunk body, not a source")
+    print(f"fabricated references: {len(bad):>3}")
     if with_cit:
         print(f"citation_validity:    "
               f"{sum(r_['citation_validity'] for r_ in with_cit) / len(with_cit):.3f}"
-              f"  (сторож, ожидается 1.000)")
+              f"  (regression guard, 1.000 expected)")
 
     quote_summary(rows)
 
@@ -938,14 +938,14 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
 
     print(f"\nretrieval recall@{TOP_K}: {len(hits)}/{n} = {len(hits) / n:.2f}")
     print("                     回答可能   回答不可")
-    print(f"  A: статья найдена   {len(q(True, 'ok')):>5}   {len(over):>5}  ← over-refusal")
-    print(f"  B: статьи нет      {len(blind):>5}   {len(q(False, 'no')):>5}")
-    print(f"                     ↑ ответ мимо источника")
+    print(f"  A: article found    {len(q(True, 'ok')):>5}   {len(over):>5}  ← over-refusal")
+    print(f"  B: article absent   {len(blind):>5}   {len(q(False, 'no')):>5}")
+    print(f"                     ↑ answered without the source")
     if miss:
-        print(f"  отказ при промахе:  {len(q(False, 'no')) / len(miss):.2f}   (выше — лучше)")
+        print(f"  refusal on a miss:  {len(q(False, 'no')) / len(miss):.2f}   (higher is better)")
     if hits:
-        print(f"  отказ при попадании:{len(over) / len(hits):.2f}   (ниже — лучше)")
-    for label, group in (("over-refusal", over), ("ответ без источника", blind)):
+        print(f"  refusal on a hit:   {len(over) / len(hits):.2f}   (lower is better)")
+    for label, group in (("over-refusal", over), ("answer without the source", blind)):
         if group:
             print(f"  {label}: " + ", ".join(f"#{r_['id']}" for r_ in group))
 
@@ -953,7 +953,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     # gen_report_whole.json must stay — the ablation is paired against it.
     out = report_path(mode, "_quotes" if quotes else "")
     out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"→ {out}  (последний прогон этого промпта — его читают другие скрипты)")
+    print(f"→ {out}  (latest run of this prompt — other scripts read it)")
     log_run(rows, system, mode, "quotes" if quotes else "base")
 
 
@@ -971,15 +971,15 @@ def cmd_ablate(mode=DEFAULT_MODE):
     hit, and supplies the verdict for the paired comparison.
     """
     if not report_path(mode).exists():
-        sys.exit(f"сначала --eval в режиме {mode}: нужен "
-                 f"{report_path(mode).name} для парного сравнения")
+        sys.exit(f"run --eval in mode {mode} first: "
+                 f"{report_path(mode).name} is needed for the paired comparison")
     base = {b["id"]: b for b in
             json.loads(report_path(mode).read_text(encoding="utf-8"))}
     targets = [g for g in load_golden() if base.get(g["id"], {}).get("hit")]
 
     r = Reranked()
     rows = []
-    print(f"абляция ({mode}): убираем золотую статью у {len(targets)} вопросов\n")
+    print(f"ablation ({mode}): removing the gold article for {len(targets)} questions\n")
     with httpx.Client() as cl:
         for i, g in enumerate(targets, 1):
             gold = {tuple(x) for x in g["relevant"]}
@@ -996,7 +996,7 @@ def cmd_ablate(mode=DEFAULT_MODE):
                          "n_context": len(ch),
                          "context": [f"{c['law_id']} {c['article_title']}" for c in ch],
                          **info})
-            mark = {"no": "ОТКАЗ", "ok": "ответ", None: "  ?  "}[info["verdict"]]
+            mark = {"no": "REFUS", "ok": "answr", None: "  ?  "}[info["verdict"]]
             print(f"{i:>2}/{len(targets)} {mark} {g['q'][:26]}")
 
     n = len(rows)
@@ -1004,9 +1004,9 @@ def cmd_ablate(mode=DEFAULT_MODE):
     answered = [x for x in rows if x["verdict"] == "ok"]
     substituted = [x for x in answered if x["marks"]]
 
-    print(f"\nаблировано вопросов: {n}")
-    print(f"отказалась:          {len(refused):>3}  = {len(refused) / n:.2f}  (выше — лучше)")
-    print(f"ответила по соседней: {len(substituted):>3}  = {len(substituted) / n:.2f}")
+    print(f"\nablated questions:   {n}")
+    print(f"refused:             {len(refused):>3}  = {len(refused) / n:.2f}  (higher is better)")
+    print(f"answered from a neighbour: {len(substituted):>3}  = {len(substituted) / n:.2f}")
 
     # Paired table: the same question with the source and without it.
     # If the model senses the presence of a source, the mass should move
@@ -1014,11 +1014,11 @@ def cmd_ablate(mode=DEFAULT_MODE):
     def cell(b, a):
         return sum(1 for x in rows if x["verdict_base"] == b and x["verdict"] == a)
 
-    print("\nпарное сравнение (строки — с источником, столбцы — без)")
+    print("\npaired comparison (rows — with the source, columns — without)")
     print("              回答可能   回答不可")
-    print(f"  回答可能      {cell('ok', 'ok'):>5}   {cell('ok', 'no'):>5}  ← заметила пропажу")
+    print(f"  回答可能      {cell('ok', 'ok'):>5}   {cell('ok', 'no'):>5}  ← noticed the loss")
     print(f"  回答不可      {cell('no', 'ok'):>5}   {cell('no', 'no'):>5}")
-    print(f"              ↑ не заметила")
+    print(f"              ↑ did not notice")
 
     out = report_path(mode, "_ablate")
     out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1030,7 +1030,7 @@ def main():
     mode = ("raw" if "--nodedupe" in args else
             "dedupe" if "--dedupe" in args else
             "whole" if "--whole" in args else DEFAULT_MODE)
-    # The quote prompt is the default; --base is the phase 4 prompt.
+    # The quote prompt is the default; --base is the original prompt without quotes.
     tracing.setup()
     quotes = "--base" not in args
     if "--ablate" in args:
@@ -1050,11 +1050,11 @@ def main():
         ans = generate(query, ch, system=SYSTEM_QUOTES if quotes else SYSTEM_BASE)
         tracing.set_attrs(sp, {"output.value": ans})
     print(f"\n{guard_links(ans)[0]}\n")
-    print("— источники —")
+    print("— sources —")
     for i, c in enumerate(ch, 1):
         print(f"[{i}] {c['law_title'][:24]} {c['article_title']}"
               f"{c['article_caption'] or ''}")
-    print("— цитаты —")
+    print("— quotes —")
     print_quotes(inspect(ans, ch))
 
 
