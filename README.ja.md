@@ -353,7 +353,7 @@ recall@k は、上位 k 件に**いずれか1つ**の該当条文が入ってい
 
 ```bash
 cp .env.example .env                          # PowerShell: Copy-Item .env.example .env。POSTGRES_PASSWORD を設定
-docker compose up -d                          # Postgres + pgvector
+docker compose up -d --wait                   # Postgres + pgvector; --wait: until it accepts connections
 uv sync
 
 # data/manifest.json はコミット済みで、各法令の版（law_revision_id）を固定しています。

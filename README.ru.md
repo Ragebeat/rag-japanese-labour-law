@@ -353,7 +353,7 @@ Recall@k засчитывается, если **хотя бы одна** рел�
 
 ```bash
 cp .env.example .env                          # PowerShell: Copy-Item .env.example .env; задать POSTGRES_PASSWORD
-docker compose up -d                          # Postgres + pgvector
+docker compose up -d --wait                   # Postgres + pgvector; --wait: until it accepts connections
 uv sync
 
 # data/manifest.json закоммичен и закрепляет за каждым законом редакцию (law_revision_id);

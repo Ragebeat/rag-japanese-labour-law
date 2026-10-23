@@ -353,7 +353,7 @@ Needs: Docker, [uv](https://docs.astral.sh/uv/) (installs Python 3.14 from `.pyt
 
 ```bash
 cp .env.example .env                          # PowerShell: Copy-Item .env.example .env; set POSTGRES_PASSWORD
-docker compose up -d                          # Postgres + pgvector
+docker compose up -d --wait                   # Postgres + pgvector; --wait: until it accepts connections
 uv sync
 
 # data/manifest.json is committed and pins each statute to a revision (law_revision_id);

@@ -171,7 +171,9 @@ def main():
     if ea and eb and ea["fingerprint"] == eb["fingerprint"]:
         print("⚠ same configuration — every difference below is run-to-run variance")
     elif ea and eb:
-        changed = [k for k in ea["config"] if ea["config"][k] != eb["config"].get(k)]
+        # The union of keys: the BGE-M3 runs predate the "embedder" key, and a key missing on one side is a change too
+        changed = [k for k in sorted(ea["config"].keys() | eb["config"].keys())
+                   if ea["config"].get(k) != eb["config"].get(k)]
         print(f"configuration changed: {', '.join(changed)}")
 
     # Metrics are recomputed from the rows, not taken from the log: the same
