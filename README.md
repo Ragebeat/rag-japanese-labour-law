@@ -8,7 +8,7 @@ A retrieval-and-answer system over the corpus of Japanese labour legislation. It
 
 Built as a portfolio project, but with production-grade measurement discipline: **every improvement is backed by a number on a golden dataset, and every rejected design was rejected on evidence rather than taste.**
 
-**Contents:** [Results](#results) · [Interface](#interface) · [Architecture](#architecture) · [What did not work](#what-did-not-work) · [Refusal when the source is absent](#refusal-when-the-source-is-absent) · [Security and operations](#security-and-operations) · [Evaluation](#evaluation) · [Caveats](#caveats) · [Open problems](#open-problems) · [Where the numbers come from](#where-the-numbers-come-from) · [Running it](#running-it) · [Stack](#stack) · [Extension: the RAG as a tool for an agent](#extension-the-rag-as-a-tool-for-an-agent) · [License](#license)
+**Contents:** [Results](#results) · [Interface](#interface) · [Architecture](#architecture) · [What did not work](#what-did-not-work) · [Refusal when the source is absent](#refusal-when-the-source-is-absent) · [Security and operations](#security-and-operations) · [Evaluation](#evaluation) · [Caveats](#caveats) · [Open problems](#open-problems) · [Where the numbers come from](#where-the-numbers-come-from) · [Running it](#running-it) · [Repository layout](#repository-layout) · [Stack](#stack) · [Extension: the RAG as a tool for an agent](#extension-the-rag-as-a-tool-for-an-agent) · [License](#license)
 
 ---
 
@@ -345,36 +345,29 @@ Run fingerprints in `data/runs.jsonl`: `8b80e255` BGE-M3 with the quote prompt �
 
 ## Running it
 
+There are two paths. **Run the system** is the minimum to get answers: Ruri, the reranker and the generator. **Reproduce the experiments** adds what the numbers in this README were measured with, including the earlier BGE-M3 pipeline.
+
+### Run the system
+
+Needs: Docker, [uv](https://docs.astral.sh/uv/) (installs Python 3.14 from `.python-version`), [Ollama](https://ollama.com) with `ollama pull gemma4:e4b`, Node.js for the web UI. Ruri-v3 and the reranker are downloaded from Hugging Face on first use (pinned commits) and run on the CPU.
+
 ```bash
+cp .env.example .env                          # PowerShell: Copy-Item .env.example .env; set POSTGRES_PASSWORD
 docker compose up -d                          # Postgres + pgvector
 uv sync
 
-# data/manifest.json is committed and pins each statute to a revision (law_revision_id).
-# fetch_manifest.py rebuilds it from today's e-Gov list: run it only to move to newer texts,
-# and expect the numbers in this README to shift.
+# data/manifest.json is committed and pins each statute to a revision (law_revision_id);
+# fetch_manifest.py rebuilds it from today's e-Gov list — only to move to newer texts.
 uv run python src/download_laws.py            # statute bodies (XML), the pinned revisions
-uv run python src/analyze.py                  # corpus statistics
 uv run python src/chunk.py                    # chunking
-uv run python src/embed.py                    # BGE-M3 embeddings (~25 min)
 uv run python src/db_init.py schema           # table (drops it if it exists)
-uv run python src/db_init.py load             # chunks + BGE-M3 vectors
+uv run python src/db_init.py load             # chunks; the BGE-M3 column stays empty without embed.py
 uv run python src/db_init.py index            # indexes, after loading
-
-# Ruri-v3 — the default embedder. Order matters: encode reuses the core
-# vectors cached by embed_compare. CPU, cached in data/emb/, resumable.
-uv run python src/embed_compare.py --only ruri   # core slice + model comparison
-uv run python src/embed_ruri.py encode        # the rest of the corpus
+uv run python src/embed_ruri.py encode        # Ruri for the whole corpus: CPU, cached in data/emb/, resumable
 uv run python src/embed_ruri.py load          # column embedding_ruri + HNSW
-uv run python src/embed_ruri.py check         # HNSW vs exact search per ef_search
-# db_init.py schema drops the table: after a rebuild run `embed_ruri.py load` again
 
 uv run python src/generate.py "有給って入社してすぐもらえるの？"
-uv run python src/generate.py --eval          # golden-set run
-uv run python src/generate.py --ablate        # ablation
-uv run python src/verify.py --calibrate       # judge calibration
-uv run python src/compare.py                  # diff the last two runs
-uv run python src/test_quotes.py              # verbatim-quote check
-uv run python src/test_guard.py               # output link guard
+uv run python src/test_quotes.py; uv run python src/test_guard.py; uv run python src/test_agent.py; uv run python src/test_memory.py
 ```
 
 Web:
@@ -386,7 +379,69 @@ cd web && npm install && npm run dev          # UI on :5173
 cd web && npm run build                       # build; served by the same FastAPI
 ```
 
-Environment variables: `GEN_MODEL`, `JUDGE_MODEL`, Postgres credentials — all in `.env`; start from the template: `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`).
+### Reproduce the experiments
+
+On top of the system above. Also needs `ollama pull bge-m3`, and `ollama pull qwen3:8b` for `verify.py`. Every generation number in this README was measured on `gemma4:e4b`.
+
+```bash
+uv run python src/analyze.py                  # corpus statistics behind the chunking rules
+uv run python src/embed.py                    # BGE-M3 vectors (~25 min)
+uv run python src/db_init.py schema           # reload with the BGE-M3 column filled
+uv run python src/db_init.py load
+uv run python src/db_init.py index
+uv run python src/embed_ruri.py load          # schema dropped the Ruri column; the vectors are cached
+uv run python src/embed_ruri.py check         # HNSW vs exact search per ef_search
+uv run python src/embed_compare.py            # embedder comparison (all models; --only ruri for one)
+
+uv run python src/generate.py --eval          # golden-set run, logged to data/runs.jsonl
+uv run python src/compare.py                  # diff the last two runs, per question
+uv run python src/generate.py --ablate        # refusal when the source is absent
+uv run python src/verify.py --calibrate       # judge calibration
+```
+
+Every other experiment is listed with its script and result file in *Where the numbers come from*; each script's docstring gives its exact command.
+
+## Repository layout
+
+Every script starts with a docstring that says what it does and how to run it. ▶ marks a script you run; the rest are modules imported by others.
+
+**Corpus and index** (see *Running it*: system path, then experiments path)
+- ▶ `fetch_manifest.py` — the statute list with pinned revisions (`data/manifest.json`, committed; rerun only to move to newer texts)
+- ▶ `download_laws.py` — statute XML by the pinned revisions
+- ▶ `analyze.py` — corpus statistics the chunking rules were derived from (experiments)
+- ▶ `chunk.py` — three-level chunking
+- ▶ `embed.py` — BGE-M3 vectors through Ollama: the earlier pipeline, experiments only
+- ▶ `db_init.py` — Postgres schema, load, indexes
+- ▶ `embed_compare.py` — embedder comparison on the core slice (experiments; needs the BGE-M3 vectors)
+- ▶ `embed_ruri.py` — Ruri vectors for the whole corpus, HNSW index, `ef_search` check
+
+**Answering**
+- ▶ `generate.py` — retrieval + generation + all answer checks; also `--eval`, `--ablate`, the run log (`data/runs.jsonl`)
+- ▶ `api.py` — FastAPI + SSE over the same pipeline (`uvicorn src.api:app`); the UI is in `web/`
+
+**Retrieval modules**
+- `env.py` — `.env` loading and the database DSN
+- `hybrid.py` — search in Postgres: vector (Ruri or BGE-M3), BM25, RRF fusion, optional query expansion
+- `rerank.py` — cross-encoder reranking on top of `hybrid.py`
+- `query_expand.py` — the colloquial → statutory dictionary (`data/synonyms.json`); also feeds the term hint
+- `query_llm.py` — LLM query expansion, the fallback to the dictionary; used only by the earlier BGE-M3 pipeline and `sweep.py` (model: `LLM_MODEL`)
+- `search.py` — the first numpy vector search; kept as the baseline that `eval.py` and `embed_compare.py` reproduce
+- `tokenize_ja.py` — Sudachi tokenisation for BM25 · `jnum.py` — Japanese numerals and article references
+
+**Evaluation and experiments** (each one is listed with its result file in *Where the numbers come from*)
+- ▶ `eval.py`, `eval_hybrid.py`, `sweep.py` — retrieval metrics on the golden set
+- ▶ `compare.py` — diff two runs from the log, per question · ▶ `rescore_quotes.py` — re-score saved answers without regenerating
+- ▶ `verify.py` — the judge experiments (`--calibrate`, `--structural`) · ▶ `make_review.py` — the manual annotation form
+- ▶ `score_gate.py`, `margin_gate.py` — refusal thresholds on reranker scores
+- ▶ `injection_test.py` — indirect prompt injection · ▶ `perturb_test.py` — width variants of the query · ▶ `check_ctx.py` — silent context truncation
+- ▶ `expand_golden.py` — the rejected golden-set expansion · ▶ `toc.py` — browse a statute to verify golden answers
+
+**Agent** (see *Extension*)
+- ▶ `agent.py` — bare ReAct loop · ▶ `agent_graph.py` — the LangGraph version with memory · `mcp_server.py` — the tool over MCP (started by an MCP client)
+
+**Other**
+- `tracing.py` — OpenTelemetry spans for Phoenix, content masked by default
+- ▶ `test_*.py` — deterministic tests, no database or LLM needed
 
 ## Stack
 

@@ -1,6 +1,6 @@
 """Ruri v3 vectors for the whole corpus, into Postgres next to BGE-M3.
 
-  uv run python src/embed_ruri.py encode   # non-core chunks (core reused from embed_compare)
+  uv run python src/embed_ruri.py encode   # the whole corpus (core reused from embed_compare if cached)
   uv run python src/embed_ruri.py load     # column embedding_ruri + HNSW index
   uv run python src/embed_ruri.py check    # HNSW vs exact search, per ef_search
 
@@ -9,9 +9,9 @@ metadata field are the same; only the vector differs. Hybrid picks the
 column by its embedder (EMBEDDERS in hybrid.py), BGE-M3 stays untouched, and
 switching back is one environment variable.
 
-The core 7 452 chunks were already encoded by embed_compare.py with the same
-model, revision and document prefix — they are reused, not recomputed. Only
-the remaining ~12 700 are encoded here.
+If embed_compare.py has already encoded the core 7 452 chunks with the same
+model, revision and document prefix, they are reused, not recomputed; otherwise
+they are encoded here into the same cache. Then the remaining ~12 700.
 
 ⚠️ db_init.py `schema` drops the table, and this column with it. After a
 full rebuild run `load` here again (the vectors stay cached in data/emb/).
@@ -54,11 +54,11 @@ def cmd_encode():
     core = [i for i, c in enumerate(meta) if c["core"]]
     rest = [i for i, c in enumerate(meta) if not c["core"]]
 
-    core_vecs = np.load(EMB_DIR / f"{KEY}.npy")
-    assert len(core_vecs) == len(core), "core cache is from a different corpus"
-
     model = SentenceTransformer(hf_id, device="cpu", revision=rev)
-    print(f"core from cache: {len(core)}, to encode: {len(rest)}")
+    # The same cache key, texts and prefix as embed_compare.py: a finished cache is reused as is
+    core_vecs = encode_docs(model, KEY, [meta[i]["text"] for i in core], dp)
+    assert len(core_vecs) == len(core), "core cache is from a different corpus"
+    print(f"core: {len(core)}, to encode: {len(rest)}")
     rest_vecs = encode_docs(model, f"{KEY}.rest", [meta[i]["text"] for i in rest], dp)
 
     full = np.zeros((len(meta), CFG["dim"]), dtype=np.float32)

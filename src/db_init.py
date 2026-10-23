@@ -49,7 +49,9 @@ CREATE TABLE chunks (
     level           smallint,
     n_chars         integer,
 
-    embedding       vector(1024) NOT NULL,
+    -- BGE-M3 (the earlier pipeline). NULL when embed.py was not run: the system
+    -- itself searches with Ruri (embedding_ruri, added by embed_ruri.py load)
+    embedding       vector(1024),
     -- Japanese is tokenised by Sudachi outside the database and arrives
     -- already space-separated → 'simple', no stemming
     tokens          text NOT NULL,
@@ -90,8 +92,13 @@ def cmd_schema():
 
 def cmd_load():
     meta = [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
-    vecs = np.load(VECTORS)
-    assert len(meta) == len(vecs), f"{len(meta)} chunks vs {len(vecs)} vectors"
+    if VECTORS.exists():
+        vecs = np.load(VECTORS)
+        assert len(meta) == len(vecs), f"{len(meta)} chunks vs {len(vecs)} vectors"
+    else:
+        # The system runs on Ruri; BGE-M3 vectors are needed only to reproduce the experiments
+        print(f"no {VECTORS.name}: loading without BGE-M3 vectors (run embed.py to reproduce the experiments)")
+        vecs = [None] * len(meta)
 
     t0 = time.time()
     with connect() as conn:

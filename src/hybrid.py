@@ -94,6 +94,17 @@ class Hybrid:
         self.conn = psycopg.connect(DSN, autocommit=True)
         register_vector(self.conn)
         self.conn.execute(f"SET hnsw.ef_search = {EF_SEARCH}")
+        # A column that exists but is empty would return nothing, silently
+        ready = self.conn.execute(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.columns"
+            " WHERE table_name = 'chunks' AND column_name = %s)", (self.column,)).fetchone()[0]
+        if ready:
+            ready = self.conn.execute(
+                f"SELECT EXISTS (SELECT 1 FROM chunks WHERE {self.column} IS NOT NULL)").fetchone()[0]
+        if not ready:
+            hint = ("embed_ruri.py encode + load" if self.embedder != "bge-m3"
+                    else "embed.py, then db_init.py schema/load/index and embed_ruri.py load")
+            raise RuntimeError(f"no {self.embedder} vectors in the database: run {hint}")
         self.http = httpx.Client()
 
     def embed(self, text):

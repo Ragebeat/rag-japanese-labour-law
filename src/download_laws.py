@@ -1,3 +1,10 @@
+"""Download the statute bodies (XML) for every manifest record, by the pinned law_revision_id.
+
+Already downloaded files are skipped; failures go to data/failed.json.
+
+  uv run python src/download_laws.py
+"""
+
 import base64
 import json
 import pathlib

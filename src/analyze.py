@@ -1,3 +1,10 @@
+"""Corpus statistics: documents by type, article and paragraph length, token estimates.
+
+The chunking rules in chunk.py were derived from these distributions.
+
+  uv run python src/analyze.py
+"""
+
 import json
 import pathlib
 import re

@@ -1,3 +1,10 @@
+"""Build data/manifest.json: the list of labour statutes (e-Gov category 020) with their revision ids.
+
+The manifest is committed and pins every statute to a revision. Rerun only to move to newer texts.
+
+  uv run python src/fetch_manifest.py
+"""
+
 import json
 import pathlib
 import time

@@ -8,7 +8,7 @@
 
 ポートフォリオとして作成したものですが、計測については実務と同じ規律で進めました。**すべての改善は golden dataset 上の数値で裏付けられており、採用しなかった設計もすべて数値を根拠に却下しています。**
 
-**目次:** [結果](#結果) · [画面](#画面) · [構成](#構成) · [うまくいかなかったこと](#うまくいかなかったこと) · [根拠が存在しない場合の回答拒否](#根拠が存在しない場合の回答拒否) · [セキュリティと運用](#セキュリティと運用) · [評価](#評価) · [注意事項](#注意事項) · [未解決の課題](#未解決の課題) · [数値の出所](#数値の出所) · [実行方法](#実行方法) · [技術構成](#技術構成) · [拡張：エージェントのツールとしての RAG](#拡張エージェントのツールとしての-rag) · [ライセンス](#ライセンス)
+**目次:** [結果](#結果) · [画面](#画面) · [構成](#構成) · [うまくいかなかったこと](#うまくいかなかったこと) · [根拠が存在しない場合の回答拒否](#根拠が存在しない場合の回答拒否) · [セキュリティと運用](#セキュリティと運用) · [評価](#評価) · [注意事項](#注意事項) · [未解決の課題](#未解決の課題) · [数値の出所](#数値の出所) · [実行方法](#実行方法) · [リポジトリ構成](#リポジトリ構成) · [技術構成](#技術構成) · [拡張：エージェントのツールとしての RAG](#拡張エージェントのツールとしての-rag) · [ライセンス](#ライセンス)
 
 ---
 
@@ -345,36 +345,29 @@ recall@k は、上位 k 件に**いずれか1つ**の該当条文が入ってい
 
 ## 実行方法
 
+方法は 2 つあります。**システムを動かす**は回答を得るための最小構成（Ruri、再ランカー、生成モデル）です。**実験を再現する**は、この README の数値を測った環境一式（以前の BGE-M3 パイプラインを含む）を加えます。
+
+### システムを動かす
+
+必要なもの：Docker、[uv](https://docs.astral.sh/uv/)（`.python-version` に従って Python 3.14 を入れます）、`ollama pull gemma4:e4b` 済みの [Ollama](https://ollama.com)、Web 画面用の Node.js。Ruri-v3 と再ランカーは初回実行時に Hugging Face から取得し（コミット固定）、CPU で動かします。
+
 ```bash
+cp .env.example .env                          # PowerShell: Copy-Item .env.example .env。POSTGRES_PASSWORD を設定
 docker compose up -d                          # Postgres + pgvector
 uv sync
 
 # data/manifest.json はコミット済みで、各法令の版（law_revision_id）を固定しています。
-# fetch_manifest.py は現在の e-Gov の一覧から作り直すため、新しい本文に移るときだけ実行します
-# （その場合、この README の数値は変わります）。
+# fetch_manifest.py は現在の e-Gov の一覧から作り直します。新しい本文に移るときだけ使います。
 uv run python src/download_laws.py            # 法令本文（XML）、固定した版
-uv run python src/analyze.py                  # コーパス統計
 uv run python src/chunk.py                    # チャンク分割
-uv run python src/embed.py                    # BGE-M3 の埋め込み（約25分）
 uv run python src/db_init.py schema           # テーブル作成（既存なら作り直し）
-uv run python src/db_init.py load             # チャンク + BGE-M3 のベクトル
+uv run python src/db_init.py load             # チャンク。embed.py なしでは BGE-M3 の列は空のまま
 uv run python src/db_init.py index            # 索引（投入の後）
-
-# Ruri-v3 が既定の埋め込みモデルです。順序が重要：encode は embed_compare がキャッシュした
-# コアのベクトルを再利用します。CPU で実行、data/emb/ にキャッシュ、中断しても再開できます。
-uv run python src/embed_compare.py --only ruri   # コア部分 + モデル比較
-uv run python src/embed_ruri.py encode        # 残りのコーパス
+uv run python src/embed_ruri.py encode        # コーパス全体の Ruri。CPU、data/emb/ にキャッシュ、再開可能
 uv run python src/embed_ruri.py load          # embedding_ruri 列 + HNSW
-uv run python src/embed_ruri.py check         # ef_search ごとに HNSW と厳密検索を比較
-# db_init.py はテーブルを作り直すため、再構築後は `embed_ruri.py load` をもう一度実行
 
 uv run python src/generate.py "有給って入社してすぐもらえるの？"
-uv run python src/generate.py --eval          # golden での実行
-uv run python src/generate.py --ablate        # アブレーション
-uv run python src/verify.py --calibrate       # 判定モデルの較正
-uv run python src/compare.py                  # 直近 2 回の実行を比較
-uv run python src/test_quotes.py              # 逐語引用の検証
-uv run python src/test_guard.py               # 出力のリンク検査
+uv run python src/test_quotes.py; uv run python src/test_guard.py; uv run python src/test_agent.py; uv run python src/test_memory.py
 ```
 
 Web:
@@ -386,7 +379,69 @@ cd web && npm install && npm run dev          # 画面は :5173
 cd web && npm run build                       # ビルド。同じ FastAPI が配信
 ```
 
-環境変数（`GEN_MODEL`、`JUDGE_MODEL`、Postgres の接続情報）は `.env` に置きます。テンプレートからコピーしてください：`cp .env.example .env`（PowerShell では `Copy-Item .env.example .env`）。
+### 実験を再現する
+
+上のシステムに追加します。さらに `ollama pull bge-m3` と、`verify.py` 用に `ollama pull qwen3:8b` が必要です。この README の生成の数値はすべて `gemma4:e4b` で測定しています。
+
+```bash
+uv run python src/analyze.py                  # チャンク規則の元になったコーパス統計
+uv run python src/embed.py                    # BGE-M3 のベクトル（約25分）
+uv run python src/db_init.py schema           # BGE-M3 の列を埋めて投入し直す
+uv run python src/db_init.py load
+uv run python src/db_init.py index
+uv run python src/embed_ruri.py load          # schema で Ruri の列も消えるため。ベクトルはキャッシュ済み
+uv run python src/embed_ruri.py check         # ef_search ごとに HNSW と厳密検索を比較
+uv run python src/embed_compare.py            # 埋め込みモデルの比較（全モデル。--only ruri で 1 つ）
+
+uv run python src/generate.py --eval          # golden での実行。data/runs.jsonl に記録
+uv run python src/compare.py                  # 直近 2 回の実行を質問ごとに比較
+uv run python src/generate.py --ablate        # 根拠がない場合の回答拒否
+uv run python src/verify.py --calibrate       # 判定モデルの較正
+```
+
+その他の実験は、スクリプトと結果ファイルの対応を「数値の出所」に載せています。正確なコマンドは各スクリプトの docstring にあります。
+
+## リポジトリ構成
+
+各スクリプトの冒頭には、何をするか・どう実行するかを書いた docstring があります。▶ は実行するスクリプト、それ以外は他から読み込まれるモジュールです。
+
+**コーパスと索引**（「実行方法」を参照：システムの手順、次に実験の手順）
+- ▶ `fetch_manifest.py` — 版を固定した法令一覧（`data/manifest.json`、コミット済み。新しい本文に移るときだけ再実行）
+- ▶ `download_laws.py` — 固定した版の法令 XML
+- ▶ `analyze.py` — チャンク分割の規則の元になったコーパス統計（実験用）
+- ▶ `chunk.py` — 3 段階のチャンク分割
+- ▶ `embed.py` — Ollama 経由の BGE-M3 ベクトル。以前のパイプラインで、実験専用
+- ▶ `db_init.py` — Postgres のスキーマ、投入、索引
+- ▶ `embed_compare.py` — コア部分での埋め込みモデル比較（実験用。BGE-M3 のベクトルが必要）
+- ▶ `embed_ruri.py` — コーパス全体の Ruri ベクトル、HNSW 索引、`ef_search` の確認
+
+**回答**
+- ▶ `generate.py` — 検索 + 生成 + 回答の全検査。`--eval`、`--ablate`、実行ログ（`data/runs.jsonl`）もここ
+- ▶ `api.py` — 同じパイプラインの FastAPI + SSE（`uvicorn src.api:app`）。画面は `web/`
+
+**検索モジュール**
+- `env.py` — `.env` の読み込みとデータベース接続文字列
+- `hybrid.py` — Postgres での検索：ベクトル（Ruri または BGE-M3）、BM25、RRF による統合、任意のクエリ拡張
+- `rerank.py` — `hybrid.py` の上でのクロスエンコーダ再ランキング
+- `query_expand.py` — 「日常語 → 法令用語」辞書（`data/synonyms.json`）。用語ヒントもここから
+- `query_llm.py` — 辞書の補完としての LLM クエリ拡張。以前の BGE-M3 パイプラインと `sweep.py` だけが使用（モデル：`LLM_MODEL`）
+- `search.py` — 最初の numpy ベクトル検索。`eval.py` と `embed_compare.py` が再現する基準として残しています
+- `tokenize_ja.py` — BM25 用の Sudachi 形態素解析 · `jnum.py` — 漢数字と条文参照の解析
+
+**評価と実験**（結果ファイルとの対応は「数値の出所」）
+- ▶ `eval.py`、`eval_hybrid.py`、`sweep.py` — golden での検索指標
+- ▶ `compare.py` — ログ上の 2 回の実行を質問ごとに比較 · ▶ `rescore_quotes.py` — 保存済みの回答を再生成せずに再採点
+- ▶ `verify.py` — 判定モデルの実験（`--calibrate`、`--structural`）· ▶ `make_review.py` — 手動アノテーション用の書式
+- ▶ `score_gate.py`、`margin_gate.py` — 再ランカーのスコアによる回答拒否のしきい値
+- ▶ `injection_test.py` — 間接プロンプトインジェクション · ▶ `perturb_test.py` — 全角・半角のゆれ · ▶ `check_ctx.py` — コンテキストの暗黙の切り詰め
+- ▶ `expand_golden.py` — 不採用にした golden の拡張 · ▶ `toc.py` — golden の正解確認用の法令閲覧
+
+**エージェント**（「拡張」を参照）
+- ▶ `agent.py` — 素の ReAct ループ · ▶ `agent_graph.py` — 記憶つきの LangGraph 版 · `mcp_server.py` — MCP 経由のツール（MCP クライアントが起動）
+
+**その他**
+- `tracing.py` — Phoenix 用の OpenTelemetry スパン。内容は既定で非表示
+- ▶ `test_*.py` — 決定的なテスト。データベースも LLM も不要
 
 ## 技術構成
 

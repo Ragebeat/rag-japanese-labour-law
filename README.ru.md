@@ -8,7 +8,7 @@
 
 Проект сделан как портфолио, но с продовой дисциплиной измерений: **каждое улучшение подтверждено цифрой на golden dataset, а каждое отвергнутое решение отвергнуто по данным, а не по вкусу.**
 
-**Содержание:** [Результат в одной таблице](#результат-в-одной-таблице) · [Интерфейс](#интерфейс) · [Как устроено](#как-устроено) · [Что не сработало](#что-не-сработало) · [Отказ при отсутствии источника](#отказ-при-отсутствии-источника) · [Безопасность и эксплуатация](#безопасность-и-эксплуатация) · [Оценка качества](#оценка-качества) · [Оговорки](#оговорки) · [Открытые задачи](#открытые-задачи) · [Откуда цифры](#откуда-цифры) · [Запуск](#запуск) · [Стек](#стек) · [Расширение: RAG как инструмент агента](#расширение-rag-как-инструмент-агента) · [Лицензия](#лицензия)
+**Содержание:** [Результат в одной таблице](#результат-в-одной-таблице) · [Интерфейс](#интерфейс) · [Как устроено](#как-устроено) · [Что не сработало](#что-не-сработало) · [Отказ при отсутствии источника](#отказ-при-отсутствии-источника) · [Безопасность и эксплуатация](#безопасность-и-эксплуатация) · [Оценка качества](#оценка-качества) · [Оговорки](#оговорки) · [Открытые задачи](#открытые-задачи) · [Откуда цифры](#откуда-цифры) · [Запуск](#запуск) · [Устройство репозитория](#устройство-репозитория) · [Стек](#стек) · [Расширение: RAG как инструмент агента](#расширение-rag-как-инструмент-агента) · [Лицензия](#лицензия)
 
 ---
 
@@ -345,36 +345,29 @@ Recall@k засчитывается, если **хотя бы одна** рел�
 
 ## Запуск
 
+Путей два. **Запустить систему** — минимум, чтобы получать ответы: Ruri, реранкер и генератор. **Воспроизвести эксперименты** добавляет то, на чём сняты цифры этого README, включая прежний конвейер на BGE-M3.
+
+### Запустить систему
+
+Нужно: Docker, [uv](https://docs.astral.sh/uv/) (сам поставит Python 3.14 из `.python-version`), [Ollama](https://ollama.com) с `ollama pull gemma4:e4b`, Node.js для веб-интерфейса. Ruri-v3 и реранкер скачиваются с Hugging Face при первом запуске (коммиты закреплены) и работают на CPU.
+
 ```bash
+cp .env.example .env                          # PowerShell: Copy-Item .env.example .env; задать POSTGRES_PASSWORD
 docker compose up -d                          # Postgres + pgvector
 uv sync
 
-# data/manifest.json закоммичен и закрепляет за каждым законом редакцию (law_revision_id).
-# fetch_manifest.py пересобирает его по сегодняшнему списку e-Gov: запускать, только чтобы
-# перейти на новые тексты, и тогда цифры из этого README сдвинутся.
+# data/manifest.json закоммичен и закрепляет за каждым законом редакцию (law_revision_id);
+# fetch_manifest.py пересобирает его по сегодняшнему списку e-Gov — только для перехода на новые тексты.
 uv run python src/download_laws.py            # тела законов (XML), закреплённые редакции
-uv run python src/analyze.py                  # статистика корпуса
 uv run python src/chunk.py                    # нарезка на чанки
-uv run python src/embed.py                    # эмбеддинги BGE-M3 (~25 мин)
 uv run python src/db_init.py schema           # таблица (пересоздаётся, если есть)
-uv run python src/db_init.py load             # чанки + векторы BGE-M3
+uv run python src/db_init.py load             # чанки; без embed.py колонка BGE-M3 остаётся пустой
 uv run python src/db_init.py index            # индексы, после заливки
-
-# Ruri-v3 — эмбеддер по умолчанию. Порядок важен: encode переиспользует векторы
-# ядра, закэшированные embed_compare. CPU, кэш в data/emb/, можно прерывать и продолжать.
-uv run python src/embed_compare.py --only ruri   # срез ядра + сравнение моделей
-uv run python src/embed_ruri.py encode        # остальной корпус
+uv run python src/embed_ruri.py encode        # Ruri для всего корпуса: CPU, кэш в data/emb/, можно продолжать
 uv run python src/embed_ruri.py load          # колонка embedding_ruri + HNSW
-uv run python src/embed_ruri.py check         # HNSW против точного поиска по ef_search
-# db_init.py пересоздаёт таблицу: после пересборки снова запустить `embed_ruri.py load`
 
 uv run python src/generate.py "有給って入社してすぐもらえるの？"
-uv run python src/generate.py --eval          # прогон по golden
-uv run python src/generate.py --ablate        # абляция
-uv run python src/verify.py --calibrate       # калибровка судьи
-uv run python src/compare.py                  # сравнить два последних прогона
-uv run python src/test_quotes.py              # проверка дословных цитат
-uv run python src/test_guard.py               # фильтр ссылок в ответе
+uv run python src/test_quotes.py; uv run python src/test_guard.py; uv run python src/test_agent.py; uv run python src/test_memory.py
 ```
 
 Веб:
@@ -386,7 +379,69 @@ cd web && npm install && npm run dev          # интерфейс на :5173
 cd web && npm run build                       # сборка; отдаётся тем же FastAPI
 ```
 
-Переменные среды: `GEN_MODEL`, `JUDGE_MODEL`, доступ к Postgres — в `.env`; начать с шаблона: `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`).
+### Воспроизвести эксперименты
+
+Поверх системы выше. Дополнительно нужны `ollama pull bge-m3` и, для `verify.py`, `ollama pull qwen3:8b`. Все цифры генерации в этом README сняты на `gemma4:e4b`.
+
+```bash
+uv run python src/analyze.py                  # статистика корпуса, из которой выведены правила нарезки
+uv run python src/embed.py                    # векторы BGE-M3 (~25 мин)
+uv run python src/db_init.py schema           # перезалить с заполненной колонкой BGE-M3
+uv run python src/db_init.py load
+uv run python src/db_init.py index
+uv run python src/embed_ruri.py load          # schema удалила колонку Ruri; векторы в кэше
+uv run python src/embed_ruri.py check         # HNSW против точного поиска по ef_search
+uv run python src/embed_compare.py            # сравнение эмбеддеров (все модели; --only ruri — одна)
+
+uv run python src/generate.py --eval          # прогон по golden, запись в data/runs.jsonl
+uv run python src/compare.py                  # сравнить два последних прогона по вопросам
+uv run python src/generate.py --ablate        # отказ при отсутствии источника
+uv run python src/verify.py --calibrate       # калибровка судьи
+```
+
+Остальные эксперименты со своими скриптами и файлами результатов перечислены в разделе «Откуда цифры»; точная команда — в докстринге каждого скрипта.
+
+## Устройство репозитория
+
+Каждый скрипт начинается с докстринга: что делает и как запускать. ▶ — скрипт, который запускают; остальное — модули, которые импортируют другие.
+
+**Корпус и индекс** (см. «Запуск»: путь системы, затем путь экспериментов)
+- ▶ `fetch_manifest.py` — список законов с закреплёнными редакциями (`data/manifest.json`, закоммичен; перезапускать только для перехода на новые тексты)
+- ▶ `download_laws.py` — XML законов по закреплённым редакциям
+- ▶ `analyze.py` — статистика корпуса, из которой выведены правила нарезки (эксперименты)
+- ▶ `chunk.py` — трёхуровневая нарезка
+- ▶ `embed.py` — векторы BGE-M3 через Ollama: прежний конвейер, только для экспериментов
+- ▶ `db_init.py` — схема Postgres, заливка, индексы
+- ▶ `embed_compare.py` — сравнение эмбеддеров на ядре (эксперименты; нужны векторы BGE-M3)
+- ▶ `embed_ruri.py` — векторы Ruri для всего корпуса, индекс HNSW, проверка `ef_search`
+
+**Ответ**
+- ▶ `generate.py` — поиск + генерация + все проверки ответа; там же `--eval`, `--ablate`, журнал прогонов (`data/runs.jsonl`)
+- ▶ `api.py` — FastAPI + SSE поверх того же конвейера (`uvicorn src.api:app`); интерфейс в `web/`
+
+**Модули поиска**
+- `env.py` — загрузка `.env` и строка подключения к базе
+- `hybrid.py` — поиск в Postgres: векторный (Ruri или BGE-M3), BM25, слияние RRF, необязательное расширение запроса
+- `rerank.py` — cross-encoder поверх `hybrid.py`
+- `query_expand.py` — словарь «разговорное → законное» (`data/synonyms.json`); из него же подсказка терминов
+- `query_llm.py` — расширение запроса через LLM, запасной путь к словарю; используется только прежним конвейером на BGE-M3 и `sweep.py` (модель: `LLM_MODEL`)
+- `search.py` — первый векторный поиск на numpy; оставлен как база, которую воспроизводят `eval.py` и `embed_compare.py`
+- `tokenize_ja.py` — токенизация Sudachi для BM25 · `jnum.py` — японские числа и ссылки на статьи
+
+**Оценка и эксперименты** (каждый с файлом результата — в разделе «Откуда цифры»)
+- ▶ `eval.py`, `eval_hybrid.py`, `sweep.py` — метрики поиска на golden
+- ▶ `compare.py` — сравнить два прогона из журнала по вопросам · ▶ `rescore_quotes.py` — пересчитать сохранённые ответы без генерации
+- ▶ `verify.py` — эксперименты с судьёй (`--calibrate`, `--structural`) · ▶ `make_review.py` — бланк ручной разметки
+- ▶ `score_gate.py`, `margin_gate.py` — пороги отказа по баллам реранкера
+- ▶ `injection_test.py` — косвенная prompt injection · ▶ `perturb_test.py` — варианты ширины символов · ▶ `check_ctx.py` — тихая обрезка контекста
+- ▶ `expand_golden.py` — отвергнутое расширение golden · ▶ `toc.py` — просмотр закона для проверки ответов golden
+
+**Агент** (см. «Расширение»)
+- ▶ `agent.py` — голый цикл ReAct · ▶ `agent_graph.py` — версия на LangGraph с памятью · `mcp_server.py` — инструмент через MCP (его запускает MCP-клиент)
+
+**Прочее**
+- `tracing.py` — спаны OpenTelemetry для Phoenix, содержимое по умолчанию скрыто
+- ▶ `test_*.py` — детерминированные тесты, без базы и LLM
 
 ## Стек
 
