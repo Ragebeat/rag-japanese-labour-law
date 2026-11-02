@@ -299,6 +299,7 @@ recall@k は、上位 k 件に**いずれか1つ**の該当条文が入ってい
 - **回答20件の手動評価は人間ではなくモデル**（Claude、エージェント経由）が行っています。一次資料を参照した第二の意見であり、人間による基準ではありません
 - **4つの判定モデルのうち2つはクラウド実行**です（`gemma4:31b-cloud`、`gpt-oss:120b-cloud`）。それ以外は完全にローカルで動作します
 - **生成側の数値はすべて `gemma4:e4b` によるもの**です。モデルを変更すると比較できなくなります
+- **`gemma4:e4b` は 10月12日ごろ、同じタグのまま重みが更新されました。** 上記の生成の数値は更新前の重みで計測したものです。新しい重みでの実行（11月2日）では、50問すべてで渡したコンテキストは完全に同一でしたが、生成された回答は異なりました：引用 79（以前の3回は 91–97）、claim coverage 0.585（同 0.613–0.624）、過剰な回答拒否 2（同 1）。それ以降、実行のフィンガープリントには Ollama のモデル digest を含めているため、重みが変われば別の設定として記録され、古いハッシュに紛れることはありません。新しい重みでの再計測は未実施です
 - **golden は50問**です。この規模で 0.02 未満の差はノイズであり、構成選択の根拠にはなりません
 - **生成は温度 0 でも決定的ではありません。** 固定した同一コンテキストで、同じ質問が、あるセッションでは 3 回中 1 回、別のセッションでは 10 回中 9 回拒否されました。同一構成の実行間でも主張カバー率は 0.04〜0.08 動きます。そのため構成の比較は 3 回の実行で行い、基準側も対照として再実行しています
 - **質問拡張の辞書と生成側の用語ヒントは同じファイルです**（`data/synonyms.json`、27 組）。キーのうち 10 個は golden の質問に一度も現れませんが、50 問のうち 25 問には含まれており、新しい質問での検証は行っていません。この golden 上での効果は楽観的です
@@ -319,25 +320,25 @@ recall@k は、上位 k 件に**いずれか1つ**の該当条文が入ってい
 
 ## 数値の出所
 
-上記の数値はすべて、`src/` のスクリプトと `data/` の結果ファイルに対応しています。結果ファイルはコミットしてあります。これは計測の記録で、ローカル環境一式がなければ再生成できないためです。
+上記の数値はすべて、`experiments/` と `src/rag/` のスクリプトと `data/` の結果ファイルに対応しています。結果ファイルはコミットしてあります。これは計測の記録で、ローカル環境一式がなければ再生成できないためです。
 
 | 内容 | スクリプト | 結果 |
 |---|---|---|
-| 検索の表（BGE-M3 の行）、コアと全コーパスの差 +0.08 | `eval.py` · `eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
-| BM25 ハイブリッドの重みの傾向、再ランカーの候補数 | `sweep.py` · `sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
-| 埋め込みモデルの比較（ベクトル検索のみ） | `embed_compare.py` | `embed_compare.json` |
-| Ruri の全パイプライン：0.94、0.96 | `sweep.py --ruri` | `sweep_ruri.json` |
-| `ef_search` ごとの HNSW と厳密検索の一致率 | `embed_ruri.py check` | コンソール出力 |
-| 質問の全角・半角のゆれ | `perturb_test.py` | コンソール出力 |
-| 生成の指標、プロンプト変更ごと（各 3 回） | `generate.py --eval` · `compare.py` | `runs.jsonl` · `runs/` |
-| コンテキストの組み立て：条全体と重複除去チャンク | `generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
-| 逐語引用の検証（保存済みの回答で再採点） | `rescore_quotes.py` | `gen_report_quotes_*.json` |
-| golden の拡張（不採用） | `expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
-| 判定モデルの表、回答 20 件の手動アノテーション | `verify.py --calibrate` · `make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
-| 構造的な網羅性チェック | `verify.py --structural` | `omission_*.json` |
-| 根拠がない場合の回答拒否 | `generate.py --ablate` · `score_gate.py` · `margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
-| 間接プロンプトインジェクション | `injection_test.py` · `injection_test.py --escape` | `injection.json` · `injection_escape.json` |
-| コンテキストの切り詰め：50 件中 0 件 | `check_ctx.py` | `ctx_check.json` |
+| 検索の表（BGE-M3 の行）、コアと全コーパスの差 +0.08 | `experiments/eval.py` · `experiments/eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
+| BM25 ハイブリッドの重みの傾向、再ランカーの候補数 | `experiments/sweep.py` · `experiments/sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
+| 埋め込みモデルの比較（ベクトル検索のみ） | `experiments/embed_compare.py` | `embed_compare.json` |
+| Ruri の全パイプライン：0.94、0.96 | `experiments/sweep.py --ruri` | `sweep_ruri.json` |
+| `ef_search` ごとの HNSW と厳密検索の一致率 | `rag/index/embed_ruri.py check` | コンソール出力 |
+| 質問の全角・半角のゆれ | `experiments/perturb_test.py` | コンソール出力 |
+| 生成の指標、プロンプト変更ごと（各 3 回） | `rag/generation/generate.py --eval` · `experiments/compare.py` | `runs.jsonl` · `runs/` |
+| コンテキストの組み立て：条全体と重複除去チャンク | `rag/generation/generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
+| 逐語引用の検証（保存済みの回答で再採点） | `experiments/rescore_quotes.py` | `gen_report_quotes_*.json` |
+| golden の拡張（不採用） | `experiments/expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
+| 判定モデルの表、回答 20 件の手動アノテーション | `experiments/verify.py --calibrate` · `experiments/make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
+| 構造的な網羅性チェック | `experiments/verify.py --structural` | `omission_*.json` |
+| 根拠がない場合の回答拒否 | `rag/generation/generate.py --ablate` · `experiments/score_gate.py` · `experiments/margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
+| 間接プロンプトインジェクション | `experiments/injection_test.py` · `experiments/injection_test.py --escape` | `injection.json` · `injection_escape.json` |
+| コンテキストの切り詰め：50 件中 0 件 | `experiments/check_ctx.py` | `ctx_check.json` |
 
 `data/runs.jsonl` の実行フィンガープリント：`8b80e255` 引用プロンプトの BGE-M3 · `abda3d7e` 同じプロンプトの Ruri · `a47039ed` 不採用にした過剰拒否対策の規則 · `cfa11f74` 用語ヒント · `251a4dd9` 採用構成（用語ヒント＋見出しどおりの条番号）。`compare.py` で任意の 2 つの実行を質問ごとに比較できます。
 
@@ -403,45 +404,28 @@ uv run python -m experiments.verify --calibrate    # 判定モデルの較正
 
 ## リポジトリ構成
 
-各スクリプトの冒頭には、何をするか・どう実行するかを書いた docstring があります。▶ は実行するスクリプト、それ以外は他から読み込まれるモジュールです。
+`uv sync` で `src/rag` がパッケージとしてインストールされます。▶ は `uv run python -m <モジュール>` で実行するモジュールで、どれも冒頭の docstring に役割を書いています。
 
-**コーパスと索引**（「実行方法」を参照：システムの手順、次に実験の手順）
-- ▶ `fetch_manifest.py` — 版を固定した法令一覧（`data/manifest.json`、コミット済み。新しい本文に移るときだけ再実行）
-- ▶ `download_laws.py` — 固定した版の法令 XML
-- ▶ `analyze.py` — チャンク分割の規則の元になったコーパス統計（実験用）
-- ▶ `chunk.py` — 3 段階のチャンク分割
-- ▶ `embed.py` — Ollama 経由の BGE-M3 ベクトル。以前のパイプラインで、実験専用
-- ▶ `db_init.py` — Postgres のスキーマ、投入、索引
-- ▶ `embed_compare.py` — コア部分での埋め込みモデル比較（実験用。BGE-M3 のベクトルが必要）
-- ▶ `embed_ruri.py` — コーパス全体の Ruri ベクトル、HNSW 索引、`ef_search` の確認
-
-**回答**
-- ▶ `generate.py` — 検索 + 生成 + 回答の全検査。`--eval`、`--ablate`、実行ログ（`data/runs.jsonl`）もここ
-- ▶ `api.py` — 同じパイプラインの FastAPI + SSE（`uvicorn rag.api:app`）。画面は `web/`
-
-**検索モジュール**
-- `config.py` — `.env` の読み込みとデータベース接続文字列
-- `hybrid.py` — Postgres での検索：ベクトル（Ruri または BGE-M3）、BM25、RRF による統合、任意のクエリ拡張
-- `rerank.py` — `hybrid.py` の上でのクロスエンコーダ再ランキング
-- `query_expand.py` — 「日常語 → 法令用語」辞書（`data/synonyms.json`）。用語ヒントもここから
-- `query_llm.py` — 辞書の補完としての LLM クエリ拡張。以前の BGE-M3 パイプラインと `sweep.py` だけが使用（モデル：`LLM_MODEL`）
-- `search.py` — 最初の numpy ベクトル検索。`eval.py` と `embed_compare.py` が再現する基準として残しています
-- `tokenize_ja.py` — BM25 用の Sudachi 形態素解析 · `jnum.py` — 漢数字と条文参照の解析
-
-**評価と実験**（結果ファイルとの対応は「数値の出所」）
-- ▶ `eval.py`、`eval_hybrid.py`、`sweep.py` — golden での検索指標
-- ▶ `compare.py` — ログ上の 2 回の実行を質問ごとに比較 · ▶ `rescore_quotes.py` — 保存済みの回答を再生成せずに再採点
-- ▶ `verify.py` — 判定モデルの実験（`--calibrate`、`--structural`）· ▶ `make_review.py` — 手動アノテーション用の書式
-- ▶ `score_gate.py`、`margin_gate.py` — 再ランカーのスコアによる回答拒否のしきい値
-- ▶ `injection_test.py` — 間接プロンプトインジェクション · ▶ `perturb_test.py` — 全角・半角のゆれ · ▶ `check_ctx.py` — コンテキストの暗黙の切り詰め
-- ▶ `expand_golden.py` — 不採用にした golden の拡張 · ▶ `toc.py` — golden の正解確認用の法令閲覧
-
-**エージェント**（「拡張」を参照）
-- ▶ `agent/loop.py` — 素の ReAct ループ · ▶ `agent/graph.py` — 記憶つきの LangGraph 版 · `mcp_server.py` — MCP 経由のツール（MCP クライアントが起動）
-
-**その他**
-- `tracing.py` — Phoenix 用の OpenTelemetry スパン。内容は既定で非表示
-- ▶ `test_*.py` — 決定的なテスト。データベースも LLM も不要
+```
+src/rag/
+  config.py        .env、データベースの DSN、ROOT と DATA
+  data.py          golden.jsonl と chunks.jsonl のパス、load_jsonl()
+  text/            jnum（漢数字・条文番号）· tokenize_ja（BM25 用の Sudachi）
+                   query_expand（口語 → 法令用語の辞書 data/synonyms.json、用語ヒントにも使用）
+  ingest/          ▶ fetch_manifest · ▶ download_laws · ▶ analyze · ▶ chunk · ▶ toc
+  index/           ▶ db_init（スキーマ、ロード、インデックス）· ▶ embed（BGE-M3、旧パイプライン）
+                   ▶ embed_ruri（Ruri ベクトル、HNSW）· encoders（実験と共有する sentence-transformers のキャッシュ）
+  retrieval/       hybrid（Postgres でのベクトル、BM25、RRF）· rerank（クロスエンコーダ）· query_llm（LLM によるクエリ拡張）
+  generation/      ▶ generate（回答、--eval、--ablate）· prompts · context（raw / dedupe / whole）
+                   checks（判定、引用条文、逐語引用）· guard（リンクの許可リスト）· runs（フィンガープリント、runs.jsonl）
+  agent/           ▶ loop（素の ReAct）· ▶ graph（LangGraph）· memory（長期記憶）· mcp_server
+  api.py           FastAPI + SSE: uv run uvicorn rag.api:app
+  tracing.py       Phoenix 用の OpenTelemetry スパン、内容は既定でマスク
+experiments/       ▶ この README の数値を出したすべての計測（「数値の出所」に一覧）
+tests/             pytest: uv run pytest（データベース、LLM、モデルのダウンロード不要）
+web/               React + Vite の UI、npm run build 後は api.py が配信
+data/              コーパス、ゴールデンセット、コミット済みの結果ファイル
+```
 
 ## 技術構成
 
@@ -469,7 +453,7 @@ uv run pytest tests/test_agent.py
 uv run pytest tests/test_memory.py
 ```
 
-⚠️ コーパス全体に広げる分岐はスコアのしきい値に依存していますが、Ruri ではこのしきい値が正解と取りこぼしを分けられなくなっています（未解決の課題を参照）。現在のしきい値では、この分岐はほとんど作動しません。
+**注意：** コーパス全体に広げる分岐はスコアのしきい値に依存していますが、Ruri ではこのしきい値が正解と取りこぼしを分けられなくなっています（未解決の課題を参照）。現在のしきい値では、この分岐はほとんど作動しません。
 
 ---
 

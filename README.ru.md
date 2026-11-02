@@ -299,6 +299,7 @@ Recall@k засчитывается, если **хотя бы одна** рел�
 - **Ручную разметку 20 ответов делал не человек, а модель** (Claude через агента). Это второе мнение с доступом к первоисточнику, а не человеческий эталон
 - **Два из четырёх судей — облачные** (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`). Остальная система полностью локальна
 - **Все цифры генерации получены на `gemma4:e4b`.** Смена модели делает их несравнимыми
+- **`gemma4:e4b` около 12 октября перекачалась под тем же тегом.** Цифры генерации выше сняты на прежних весах. Прогон на новых весах (2 ноября) получил в точности тот же контекст во всех 50 вопросах, но ответы сгенерировал другие: 79 цитат против 91–97 в трёх прежних прогонах, claim coverage 0.585 против 0.613–0.624, лишних отказов 2 против 1. С тех пор в отпечаток прогона входит digest модели из Ollama, поэтому новые веса видны как новая конфигурация, а не прячутся под старым хешем. Перемерить на новых весах ещё предстоит
 - **Golden — 50 вопросов.** Разница меньше 0.02 на такой выборке считается шумом и не является основанием для выбора конфигурации
 - **Генерация недетерминирована даже при temperature 0.** На одном и том же контексте один вопрос дал 1 отказ из 3 в одной сессии и 9 из 10 в другой; покрытие утверждений одной конфигурации между одинаковыми прогонами гуляет на 0.04–0.08. Поэтому конфигурации сравниваются по трём прогонам, с контрольными перезапусками базовой
 - **Словарь расширения запроса и подсказка терминов для генератора — один файл** (`data/synonyms.json`, 27 пар). Десять ключей в golden-вопросах не встречаются, но в 25 из 50 вопросов какой-то есть, а проверки на свежих вопросах не было. Прирост на этом наборе оптимистичен
@@ -319,25 +320,25 @@ Recall@k засчитывается, если **хотя бы одна** рел�
 
 ## Откуда цифры
 
-За каждой цифрой выше стоит скрипт в `src/` и файл результата в `data/`. Файлы результатов закоммичены: это записи измерений, и без полного локального окружения их не воспроизвести.
+За каждой цифрой выше стоит скрипт в `experiments/` или `src/rag/` и файл результата в `data/`. Файлы результатов закоммичены: это записи измерений, и без полного локального окружения их не воспроизвести.
 
 | Утверждение | Скрипт | Результат |
 |---|---|---|
-| Таблица поиска (строки BGE-M3); ядро против всего корпуса, +0.08 | `eval.py` · `eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
-| Гибрид BM25: градиент веса; размер пула реранкера | `sweep.py` · `sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
-| Сравнение эмбеддеров (голый векторный поиск) | `embed_compare.py` | `embed_compare.json` |
-| Полный конвейер на Ruri: 0.94, 0.96 | `sweep.py --ruri` | `sweep_ruri.json` |
-| Совпадение HNSW с точным поиском по `ef_search` | `embed_ruri.py check` | вывод в консоль |
-| Варианты ширины символов в запросе | `perturb_test.py` | вывод в консоль |
-| Метрики генерации, каждое изменение промпта (по три прогона) | `generate.py --eval` · `compare.py` | `runs.jsonl` · `runs/` |
-| Сборка контекста: статьи целиком против дедуплицированных чанков | `generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
-| Проверка дословных цитат, пересчёт по сохранённым ответам | `rescore_quotes.py` | `gen_report_quotes_*.json` |
-| Расширение golden (отвергнуто) | `expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
-| Таблица судей; ручная разметка 20 ответов | `verify.py --calibrate` · `make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
-| Структурная проверка полноты | `verify.py --structural` | `omission_*.json` |
-| Отказ при отсутствии источника | `generate.py --ablate` · `score_gate.py` · `margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
-| Косвенная prompt injection | `injection_test.py` · `injection_test.py --escape` | `injection.json` · `injection_escape.json` |
-| Обрезка контекста: обрезано 0 промптов из 50 | `check_ctx.py` | `ctx_check.json` |
+| Таблица поиска (строки BGE-M3); ядро против всего корпуса, +0.08 | `experiments/eval.py` · `experiments/eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
+| Гибрид BM25: градиент веса; размер пула реранкера | `experiments/sweep.py` · `experiments/sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
+| Сравнение эмбеддеров (голый векторный поиск) | `experiments/embed_compare.py` | `embed_compare.json` |
+| Полный конвейер на Ruri: 0.94, 0.96 | `experiments/sweep.py --ruri` | `sweep_ruri.json` |
+| Совпадение HNSW с точным поиском по `ef_search` | `rag/index/embed_ruri.py check` | вывод в консоль |
+| Варианты ширины символов в запросе | `experiments/perturb_test.py` | вывод в консоль |
+| Метрики генерации, каждое изменение промпта (по три прогона) | `rag/generation/generate.py --eval` · `experiments/compare.py` | `runs.jsonl` · `runs/` |
+| Сборка контекста: статьи целиком против дедуплицированных чанков | `rag/generation/generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
+| Проверка дословных цитат, пересчёт по сохранённым ответам | `experiments/rescore_quotes.py` | `gen_report_quotes_*.json` |
+| Расширение golden (отвергнуто) | `experiments/expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
+| Таблица судей; ручная разметка 20 ответов | `experiments/verify.py --calibrate` · `experiments/make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
+| Структурная проверка полноты | `experiments/verify.py --structural` | `omission_*.json` |
+| Отказ при отсутствии источника | `rag/generation/generate.py --ablate` · `experiments/score_gate.py` · `experiments/margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
+| Косвенная prompt injection | `experiments/injection_test.py` · `experiments/injection_test.py --escape` | `injection.json` · `injection_escape.json` |
+| Обрезка контекста: обрезано 0 промптов из 50 | `experiments/check_ctx.py` | `ctx_check.json` |
 
 Отпечатки прогонов в `data/runs.jsonl`: `8b80e255` — BGE-M3 с промптом цитат · `abda3d7e` — Ruri, тот же промпт · `a47039ed` — отвергнутое правило против лишних отказов · `cfa11f74` — подсказка терминов · `251a4dd9` — принятая конфигурация (подсказка терминов + номер статьи как в заголовке). `compare.py` сравнивает любые два прогона по вопросам.
 
@@ -403,45 +404,28 @@ uv run python -m experiments.verify --calibrate    # калибровка суд
 
 ## Устройство репозитория
 
-Каждый скрипт начинается с докстринга: что делает и как запускать. ▶ — скрипт, который запускают; остальное — модули, которые импортируют другие.
+`uv sync` ставит `src/rag` как пакет. ▶ отмечает модуль, который запускают через `uv run python -m <модуль>`; у каждого в начале докстринг о том, что он делает.
 
-**Корпус и индекс** (см. «Запуск»: путь системы, затем путь экспериментов)
-- ▶ `fetch_manifest.py` — список законов с закреплёнными редакциями (`data/manifest.json`, закоммичен; перезапускать только для перехода на новые тексты)
-- ▶ `download_laws.py` — XML законов по закреплённым редакциям
-- ▶ `analyze.py` — статистика корпуса, из которой выведены правила нарезки (эксперименты)
-- ▶ `chunk.py` — трёхуровневая нарезка
-- ▶ `embed.py` — векторы BGE-M3 через Ollama: прежний конвейер, только для экспериментов
-- ▶ `db_init.py` — схема Postgres, заливка, индексы
-- ▶ `embed_compare.py` — сравнение эмбеддеров на ядре (эксперименты; нужны векторы BGE-M3)
-- ▶ `embed_ruri.py` — векторы Ruri для всего корпуса, индекс HNSW, проверка `ef_search`
-
-**Ответ**
-- ▶ `generate.py` — поиск + генерация + все проверки ответа; там же `--eval`, `--ablate`, журнал прогонов (`data/runs.jsonl`)
-- ▶ `api.py` — FastAPI + SSE поверх того же конвейера (`uvicorn rag.api:app`); интерфейс в `web/`
-
-**Модули поиска**
-- `config.py` — загрузка `.env` и строка подключения к базе
-- `hybrid.py` — поиск в Postgres: векторный (Ruri или BGE-M3), BM25, слияние RRF, необязательное расширение запроса
-- `rerank.py` — cross-encoder поверх `hybrid.py`
-- `query_expand.py` — словарь «разговорное → законное» (`data/synonyms.json`); из него же подсказка терминов
-- `query_llm.py` — расширение запроса через LLM, запасной путь к словарю; используется только прежним конвейером на BGE-M3 и `sweep.py` (модель: `LLM_MODEL`)
-- `search.py` — первый векторный поиск на numpy; оставлен как база, которую воспроизводят `eval.py` и `embed_compare.py`
-- `tokenize_ja.py` — токенизация Sudachi для BM25 · `jnum.py` — японские числа и ссылки на статьи
-
-**Оценка и эксперименты** (каждый с файлом результата — в разделе «Откуда цифры»)
-- ▶ `eval.py`, `eval_hybrid.py`, `sweep.py` — метрики поиска на golden
-- ▶ `compare.py` — сравнить два прогона из журнала по вопросам · ▶ `rescore_quotes.py` — пересчитать сохранённые ответы без генерации
-- ▶ `verify.py` — эксперименты с судьёй (`--calibrate`, `--structural`) · ▶ `make_review.py` — бланк ручной разметки
-- ▶ `score_gate.py`, `margin_gate.py` — пороги отказа по баллам реранкера
-- ▶ `injection_test.py` — косвенная prompt injection · ▶ `perturb_test.py` — варианты ширины символов · ▶ `check_ctx.py` — тихая обрезка контекста
-- ▶ `expand_golden.py` — отвергнутое расширение golden · ▶ `toc.py` — просмотр закона для проверки ответов golden
-
-**Агент** (см. «Расширение»)
-- ▶ `agent/loop.py` — голый цикл ReAct · ▶ `agent/graph.py` — версия на LangGraph с памятью · `mcp_server.py` — инструмент через MCP (его запускает MCP-клиент)
-
-**Прочее**
-- `tracing.py` — спаны OpenTelemetry для Phoenix, содержимое по умолчанию скрыто
-- ▶ `test_*.py` — детерминированные тесты, без базы и LLM
+```
+src/rag/
+  config.py        .env, DSN базы, ROOT и DATA
+  data.py          пути golden.jsonl и chunks.jsonl, load_jsonl()
+  text/            jnum (японские числительные, ссылки на статьи) · tokenize_ja (Sudachi для BM25)
+                   query_expand (словарь разговорное → юридическое, data/synonyms.json; он же подсказка терминов)
+  ingest/          ▶ fetch_manifest · ▶ download_laws · ▶ analyze · ▶ chunk · ▶ toc
+  index/           ▶ db_init (схема, загрузка, индексы) · ▶ embed (BGE-M3, прежний пайплайн)
+                   ▶ embed_ruri (векторы Ruri, HNSW) · encoders (кэш sentence-transformers, общий с экспериментами)
+  retrieval/       hybrid (вектор, BM25, RRF в Postgres) · rerank (кросс-энкодер) · query_llm (расширение запроса LLM)
+  generation/      ▶ generate (ответ, --eval, --ablate) · prompts · context (raw / dedupe / whole)
+                   checks (判定, ссылки на статьи, дословные цитаты) · guard (allow-list ссылок) · runs (отпечаток, runs.jsonl)
+  agent/           ▶ loop (голый ReAct) · ▶ graph (LangGraph) · memory (долговременная память) · mcp_server
+  api.py           FastAPI + SSE: uv run uvicorn rag.api:app
+  tracing.py       спаны OpenTelemetry для Phoenix, содержимое по умолчанию скрыто
+experiments/       ▶ все замеры, на которых стоит этот README (список в «Откуда цифры»)
+tests/             pytest: uv run pytest (без базы, LLM и скачивания моделей)
+web/               UI на React + Vite, после npm run build его отдаёт api.py
+data/              корпус, golden-набор и закоммиченные файлы результатов
+```
 
 ## Стек
 
@@ -469,7 +453,7 @@ uv run pytest tests/test_agent.py
 uv run pytest tests/test_memory.py
 ```
 
-⚠️ Ветка расширения на весь корпус зависит от порога по баллу, который на Ruri больше не разделяет попадания и промахи (см. «Открытые задачи»): при текущем пороге она срабатывает редко.
+**Оговорка.** Ветка расширения на весь корпус зависит от порога по баллу, который на Ruri больше не разделяет попадания и промахи (см. «Открытые задачи»): при текущем пороге она срабатывает редко.
 
 ---
 

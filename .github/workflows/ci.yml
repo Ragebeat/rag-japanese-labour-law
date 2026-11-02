@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Lint
+        run: uvx ruff check .
+      - name: Tests
+        # The tests need no database, LLM or model weights, so the heavy
+        # dependencies (torch via sentence-transformers) are not installed.
+        run: |
+          uv venv --python 3.14
+          uv pip install -e . --no-deps
+          uv pip install pytest numpy httpx langgraph "psycopg[binary]" pgvector sudachipy sudachidict-core opentelemetry-api opentelemetry-sdk
+          uv run --no-sync pytest -q

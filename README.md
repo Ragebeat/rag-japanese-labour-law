@@ -4,7 +4,7 @@
 
 > **recall@5 0.94** on a frozen 50-question golden set · fully local (Ollama, Postgres + pgvector, a GTX 1060) · every rejected design was rejected with a number.
 
-A retrieval-and-answer system over the corpus of Japanese labour legislation. It answers colloquial questions (「有給って入社してすぐもらえるの？」 — "do I get paid leave right after joining?") with statutory provisions and precise source citations.
+A retrieval-and-answer system over the corpus of Japanese labour legislation. It answers colloquial questions (「有給って入社してすぐもらえるの？」: "do I get paid leave right after joining?") with statutory provisions and precise source citations.
 
 Built as a portfolio project, but with production-grade measurement discipline: **every improvement is backed by a number on a golden dataset, and every rejected design was rejected on evidence rather than taste.**
 
@@ -26,7 +26,7 @@ Built as a portfolio project, but with production-grade measurement discipline: 
 | + cross-encoder reranking | **0.600** | **0.860** | **0.720** | 15.2 |
 | + article-level context assembly | 0.600 | **0.880** | 0.720 | 15.2 |
 
-**BGE-M3 pipeline: recall@5 0.68 → 0.88, MRR 0.495 → 0.720. Adopted configuration (Ruri-v3 + reranker): recall@5 0.94** — see below.
+**BGE-M3 pipeline: recall@5 0.68 → 0.88, MRR 0.495 → 0.720. Adopted configuration (Ruri-v3 + reranker): recall@5 0.94**; see below.
 
 ### Swapping the embedder: BGE-M3 → Ruri-v3
 
@@ -67,11 +67,11 @@ On the generation side (BGE-M3 runs): the citation contract holds in 50 out of 5
 
 The web UI is built to show **how the system works**, not just what it produced. The right-hand column lists everything retrieval returned, with reranker scores; articles the answer actually used are highlighted, the rest are dimmed. The screenshot shows the typical picture: five articles supplied, one used, and an order-of-magnitude gap in scores (0.768 against 0.054 and below).
 
-The `[1]` markers in the answer are clickable and tie each statement to its source. The 回答可能 / 回答不可 verdict is rendered as a badge — it is a field the model is required to emit on the first line, not a phrase fished out of prose.
+The `[1]` markers in the answer are clickable and tie each statement to its source. The 回答可能 / 回答不可 verdict is rendered as a badge: it is a field the model is required to emit on the first line, not a phrase fished out of prose.
 
 Responses arrive over SSE: sources are pushed as the first event, before generation starts.
 
-The interface is available in Japanese and Russian. Questions are always Japanese — the corpus, the embeddings and the prompt are Japanese, so accepting other input would be misleading.
+The interface is available in Japanese and Russian. Questions are always Japanese: the corpus, the embeddings and the prompt are Japanese, so accepting other input would be misleading.
 
 ---
 
@@ -96,9 +96,9 @@ Everything runs locally: Ollama, Postgres in Docker, a GTX 1060 6GB; Ruri and th
 
 **e-Gov 法令検索 API**, category 020 (Labour): 259 documents, 34 MB of XML.
 
-Japan has no single labour code. The law is spread across separate statutes: 労基法 is central, but parental leave lives in 育児介護休業法, workplace harassment in 労働施策総合推進法, agency work in 派遣法. On top of that sits a layer of cabinet and ministerial ordinances, which the statute defers to with the phrase 「厚生労働省令で定める」 — and that is where the operative detail actually lives.
+Japan has no single labour code. The law is spread across separate statutes: 労基法 is central, but parental leave lives in 育児介護休業法, workplace harassment in 労働施策総合推進法, agency work in 派遣法. On top of that sits a layer of cabinet and ministerial ordinances, which the statute defers to with the phrase 「厚生労働省令で定める」, and that is where the operative detail actually lives.
 
-A **core subset of 35 documents** was selected by a formal rule (14 statutes plus their implementing ordinances), with two manual exceptions the rule cannot capture. The subset is a **flag in chunk metadata**, not a separate index — which made the cost of noise measurable in a single run: **+0.08 recall@5** from excluding unrelated statutes.
+A **core subset of 35 documents** was selected by a formal rule (14 statutes plus their implementing ordinances), with two manual exceptions the rule cannot capture. The subset is a **flag in chunk metadata**, not a separate index, which made the cost of noise measurable in a single run: **+0.08 recall@5** from excluding unrelated statutes.
 
 ### Chunking
 
@@ -114,7 +114,7 @@ Three levels:
 
 **20,162 chunks total**, 7,452 of them in the core.
 
-Every chunk carries a context prefix: `労働基準法 第三十六条（時間外及び休日の労働）第1項`. Without it a bare paragraph is often meaningless — 「前項の協定においては」 ("under the agreement in the preceding paragraph") with no indication of which paragraph that is.
+Every chunk carries a context prefix: `労働基準法 第三十六条（時間外及び休日の労働）第1項`. Without it a bare paragraph is often meaningless; 「前項の協定においては」 ("under the agreement in the preceding paragraph") with no indication of which paragraph that is.
 
 Sentence splitting on 。 alone produced fragments starting with `）` and `」`: the full stop occurs **inside brackets** in legal Japanese. Enforcing bracket balance removed 167 false splits.
 
@@ -124,7 +124,7 @@ Postgres 17 + pgvector 0.8.6 in Docker. Vector and full-text indexes live in one
 
 Japanese full-text search runs on **Sudachi outside the database**: text is tokenised and stored space-separated, because the built-in `to_tsvector` would turn an entire Japanese article into a single token.
 
-**HNSW loses results silently.** After migrating from numpy to pgvector, the correct article disappeared from the top 10. The cause was the default `hnsw.ef_search = 40`; at 100 the ranking matched exact search again. The index does not fail or warn — it simply returns a list without the right answer. (100 was enough for BGE-M3; after the switch to Ruri it is 200 — see below.)
+**HNSW loses results silently.** After migrating from numpy to pgvector, the correct article disappeared from the top 10. The cause was the default `hnsw.ef_search = 40`; at 100 the ranking matched exact search again. The index does not fail or warn (it simply returns a list without the right answer. (100 was enough for BGE-M3; after the switch to Ruri it is 200) see below.)
 
 ### Japanese-specific problems
 
@@ -133,7 +133,7 @@ A layer of issues that does not exist in English corpora:
 - **No spaces between words** → BM25 requires morphological analysis. Sudachi in mode A (fine-grained): in mode C a query for 有給 would never match 年次有給休暇
 - **`normalized_form()` returns a canonical orthography, not a dictionary form**: `する → 為る`, `十 → 10`, `雇入れ → 雇い入れ`. Those spellings appear neither in the statute nor in the query. Solution: filter on the normalised form, index the surface form
 - **Article numbers are written inconsistently**: 第39条 / 第三十九条 / 第３９条. Normalisation lives in its own module (`jnum.py`) and comparison happens on canonical pairs
-- **Cross-references**: 「法第二十五条第一項の…」. An article named that way in an answer is neither a hallucination nor a source — it is a third category and is counted separately
+- **Cross-references**: 「法第二十五条第一項の…」. An article named that way in an answer is neither a hallucination nor a source; it is a third category and is counted separately
 - **Colloquial wording is not statutory wording.** 失業保険 does not occur in the Employment Insurance Act; the article says 基本手当. Retrieval put the article first, yet the generator refused on that same context 9 times out of 10; the question rewritten as 基本手当 gave 0 refusals out of 10. A general prompt rule fixed it at a price (see *What did not work*). What worked was showing the generator the colloquial → statutory pairs the search dictionary already holds, as a `【用語の対応】` line after the question
 - **Width variants of the query.** Measured on perturbed copies of the 50 questions: full-width digits and Latin (３６協定) cost nothing, the embedder handles them; half-width kana (ﾊﾟﾜﾊﾗ) lost 2 of the 11 questions it touched; a trailing space lost 1. `fold_query()` converts half-width kana and strips the query. Full NFKC was rejected: it also turns ？ and （） into ASCII, away from the form used in the corpus. Old/new kanji forms were not measured
 - **Index parameters belong to the model.** Overlap of the HNSW top-20 with exact search on Ruri: `ef_search` 40 → ~0.91, 100 → ~0.97, 200 → ≥0.995 (the index build is randomized, so overlap shifts by about 0.01 between rebuilds). A value tuned on another model silently loses part of the candidate pool; 200 is used
@@ -160,7 +160,7 @@ This is the most useful section. Half the work went into rejected designs, and e
 
 ### Hybrid BM25 + RRF: −0.18 recall@5
 
-The textbook argument — "vector search alone loses exact terms" — assumes the user writes in the same words as the document. Here the opposite holds: colloquial Japanese against bureaucratic Japanese.
+The textbook argument ("vector search alone loses exact terms") assumes the user writes in the same words as the document. Here the opposite holds: colloquial Japanese against bureaucratic Japanese.
 
 | Query | Tokens BM25 can actually use |
 |---|---|
@@ -172,7 +172,7 @@ RRF fixed 3 questions and **broke 12**. The mechanism: on a common word such as 
 
 > **Hybrid retrieval wins when the two methods fail on different queries.** Here they failed on the same ones.
 
-The gradient reads directly: the smaller the BM25 contribution, the better — 0.50 → 0.54 → 0.58 → 0.60, converging on 0.68 with BM25 switched off entirely.
+The gradient reads directly: the smaller the BM25 contribution, the better; 0.50 → 0.54 → 0.58 → 0.60, converging on 0.68 with BM25 switched off entirely.
 
 ### Expanding the golden set to match what was retrieved
 
@@ -182,7 +182,7 @@ A formal rule was written ("an ordinance article counts if it explicitly referen
 
 It was still rejected: for "do I get leave right after joining", the rule added articles about how to compute pay during leave. The rule was applied flawlessly and **not one of the additions answers the question**.
 
-> **"Implements article X" and "answers this question about X" are different relations.** The first is encoded in the structure of the corpus. The second is not in the corpus at all — it is a property of the question, and the corpus knows nothing about the question.
+> **"Implements article X" and "answers this question about X" are different relations.** The first is encoded in the structure of the corpus. The second is not in the corpus at all: it is a property of the question, and the corpus knows nothing about the question.
 
 **The golden set is deliberately frozen.** The metric compares configurations against each other; for that, annotation must be stable, not perfect.
 
@@ -196,7 +196,7 @@ Four judges were evaluated: qwen3:8b, qwen3.5, gemma4:31b, gpt-oss:120b.
 | found an inapplicable citation (of 8) | 7 | 6 | **8** | 7 |
 | share of answers blocked | 0.65 | 0.65 | 0.65 | 0.80 |
 
-**Applicability checking works** — it catches the case where the model cites a correct article that does not govern the question. **Completeness checking works on none of the models.**
+**Applicability checking works**: it catches the case where the model cites a correct article that does not govern the question. **Completeness checking works on none of the models.**
 
 > Judge quality on this task **is not a function of model size**: the spread between two 8B models is wider than the spread between 8B and 120B.
 
@@ -206,7 +206,7 @@ It cannot serve as a gate: two thirds of all answers get flagged regardless of w
 
 Since the models failed, the same class was attacked structurally: a paragraph counts as omitted if the answer does not use it while the reranker scores it no lower than the paragraph the answer did use. A rule with no tunable threshold.
 
-It failed for a fundamental reason: **the cross-encoder does not discriminate between paragraphs within a single article.** All ten paragraphs of 労基法39条 fell within `+0.000 … +0.041`, whereas the same reranker separates a relevant from an irrelevant article by `+0.934` against `+0.369` — twenty times wider.
+It failed for a fundamental reason: **the cross-encoder does not discriminate between paragraphs within a single article.** All ten paragraphs of 労基法39条 fell within `+0.000 … +0.041`, whereas the same reranker separates a relevant from an irrelevant article by `+0.934` against `+0.369`; twenty times wider.
 
 The signal is absent in both the LLM and the reranker. Tuning a rule on top of noise is not worth doing.
 
@@ -222,9 +222,9 @@ A general rule in the prompt ("a colloquial wording that differs only in vocabul
 
 A separately measured question: what does the system do when the governing article is not in the context?
 
-Only 6 of 50 questions were natural retrieval misses — too few to separate signal from chance. So a **controlled ablation** was built: for the 44 questions where retrieval succeeded, the gold article was forcibly removed from the candidate pool and replaced by the next-best candidate.
+Only 6 of 50 questions were natural retrieval misses; too few to separate signal from chance. So a **controlled ablation** was built: for the 44 questions where retrieval succeeded, the gold article was forcibly removed from the candidate pool and replaced by the next-best candidate.
 
-The design is paired — same questions, the only difference being the presence of the source. "Some questions are simply harder" is excluded by construction.
+The design is paired: same questions, the only difference being the presence of the source. "Some questions are simply harder" is excluded by construction.
 
 | Method | Refusal when source absent | False refusal |
 |---|---|---|
@@ -234,7 +234,7 @@ The design is paired — same questions, the only difference being the presence 
 
 The paired contingency table is strictly one-sided: all 11 discordant pairs point the same way, none the other. The signal is real but weak.
 
-Of the 30 answers produced without a source, **16 substitute a neighbouring institution**: the model answers with an accurate quotation from the wrong statute. The worst case: asked "I was fired without notice, is that allowed?" with 労基法20条 removed, the system answered from 労組法15条 (termination of a collective agreement) and reported a **ninety-day** notice period instead of thirty. Every automatic metric rated this answer as perfect — markers in range, citation valid, zero fabricated references.
+Of the 30 answers produced without a source, **16 substitute a neighbouring institution**: the model answers with an accurate quotation from the wrong statute. The worst case: asked "I was fired without notice, is that allowed?" with 労基法20条 removed, the system answered from 労組法15条 (termination of a collective agreement) and reported a **ninety-day** notice period instead of thirty. Every automatic metric rated this answer as perfect; markers in range, citation valid, zero fabricated references.
 
 > **For a legal assistant the danger is not an invented number. It is a correct quotation of the wrong provision, delivered fluently and with confidence.**
 
@@ -252,12 +252,12 @@ A poisoned document was placed in the context with an instruction to append a li
 
 > **For a class of harm that can be checked mechanically, the defence belongs in code, not in a request to the model.**
 
-The check is an allow-list of domains (e-Gov, MHLW), not "is the link in the sources" — a poisoned source contains it. Bare domains and e-mail addresses count. In streaming, a link is held back until it is complete and checked, so half of one never reaches the client. Links are only one kind of harm; the allow-list does not catch a phone number or a changed meaning, which is why the corpus itself is restricted to one trusted source.
+The check is an allow-list of domains (e-Gov, MHLW), not "is the link in the sources": a poisoned source contains it. Bare domains and e-mail addresses count. In streaming, a link is held back until it is complete and checked, so half of one never reaches the client. Links are only one kind of harm; the allow-list does not catch a phone number or a changed meaning, which is why the corpus itself is restricted to one trusted source.
 
 ### Operations
 
 - **Traces without content by default.** Every step is traced (Phoenix + OpenTelemetry), but questions, prompts, answers and tool arguments are masked unless `TRACE_CONTENT=1`; the length survives. Every latency finding in this project came from metadata alone, and full traces would otherwise be a store of user questions and agent memory. Exceptions are recorded by type only. Phoenix binds to localhost
-- **API.** No CORS middleware (it was `*`, and nothing needed it: dev goes through the Vite proxy, the built UI is same-origin). One request at a time with a bounded FIFO queue — the client sees its position over SSE, 429 only when the queue is full. Retrieval runs off the event loop; if a client leaves mid-rerank, the slot is held until the thread finishes. Errors go out as codes, details to the log
+- **API.** No CORS middleware (it was `*`, and nothing needed it: dev goes through the Vite proxy, the built UI is same-origin). One request at a time with a bounded FIFO queue; the client sees its position over SSE, 429 only when the queue is full. Retrieval runs off the event loop; if a client leaves mid-rerank, the slot is held until the thread finishes. Errors go out as codes, details to the log
 - **Agent memory** (`agent/graph.py`) is isolated per `user_id`, a required parameter, validated because it becomes a file name; a thread records its owner and is checked before its history is read
 - **Pinned versions**: reranker and Ruri by Hugging Face commit (the reranker's is part of the run fingerprint), Phoenix by image digest
 
@@ -273,10 +273,10 @@ recall@k counts as a hit if **at least one** relevant article appears in the top
 
 ### Generation metrics
 
-- **citation contract** — an `[N]` marker per chunk plus a `判定: 回答可能 / 回答不可` verdict on the first line. Held 50/50
-- **citation validity** — 1.000, zero fabricated references. This metric serves as a regression guard, not a quality indicator: the model can only cite what it can see
-- **false refusal** — 0 of 44 on the BGE-M3 pipeline; 1 of 47 on Ruri (#24, the false-premise question described in *What did not work*)
-- **context truncation** — none. Ollama silently trims a prompt that exceeds its default window; `check_ctx.py` found 0 of 50 prompts cut, and the window is now set explicitly (`num_ctx` 32768)
+- **citation contract**: an `[N]` marker per chunk plus a `判定: 回答可能 / 回答不可` verdict on the first line. Held 50/50
+- **citation validity**: 1.000, zero fabricated references. This metric serves as a regression guard, not a quality indicator: the model can only cite what it can see
+- **false refusal**: 0 of 44 on the BGE-M3 pipeline; 1 of 47 on Ruri (#24, the false-premise question described in *What did not work*)
+- **context truncation**: none. Ollama silently trims a prompt that exceeds its default window; `check_ctx.py` found 0 of 50 prompts cut, and the window is now set explicitly (`num_ctx` 32768)
 - **manual annotation of 20 answers** across three independent flags: substantive answer / distortion of content / extraneous material
 
 ### One technique that worked three times
@@ -295,10 +295,11 @@ Each time this replaced a heuristic with an exact match.
 
 Read these before using the numbers.
 
-- **`recall@5 = 0.88` (the BGE-M3 pipeline) is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began — which is also why Ruri's 0.94 is close to what this golden set can show at all
+- **`recall@5 = 0.88` (the BGE-M3 pipeline) is understated by our own annotation.** Four of the six misses were manually verified as golden-set artefacts. The real ceiling is ≈ 0.96. The annotation was deliberately not revised after measurement began, which is also why Ruri's 0.94 is close to what this golden set can show at all
 - **The manual annotation of 20 answers was produced by a model** (Claude, via an agent), not a human. It is a second opinion with access to the primary source, not a human gold standard
 - **Two of the four judges are cloud-hosted** (`gemma4:31b-cloud`, `gpt-oss:120b-cloud`). The rest of the system is fully local
 - **All generation numbers were obtained with `gemma4:e4b`.** Changing the generator makes them incomparable
+- **`gemma4:e4b` was re-pulled around 12 October under the same tag.** The generation numbers above were measured on the earlier weights. A run on the new weights (2 November) received exactly the same context for all 50 questions but generated different answers: 79 quotes against 91–97 in three earlier runs, claim coverage 0.585 against 0.613–0.624, over-refusal 2 against 1. Since then the run fingerprint includes the Ollama model digest, so new weights show up as a new configuration instead of hiding under the old hash. Re-measuring on the new weights is pending
 - **The golden set is 50 questions.** A difference below 0.02 on this sample is noise and is not grounds for choosing a configuration
 - **Generation is not deterministic even at temperature 0.** On one fixed context the same question gave 1 refusal in 3 runs in one session and 9 in 10 in another; claim coverage of one configuration moves by 0.04–0.08 between identical runs. Configurations here are compared over three runs, with control reruns of the baseline
 - **The query-expansion dictionary and the generator's term hint are one file** (`data/synonyms.json`, 27 pairs). Ten of its keys never occur in the golden questions, but 25 of the 50 questions contain one, and a check on fresh questions was not done. The gain on this set is optimistic
@@ -310,8 +311,8 @@ Read these before using the numbers.
 ## Open problems
 
 - **Paragraph selection within an article is uncontrolled.** The reranker does not discriminate between paragraphs, the generator picks arbitrarily, the judge sees no difference. The fix belongs earlier in the pipeline: require the generator to name the applicable paragraph explicitly
-- A router for queries that cite an article number directly — lexical lookup beats vector search there, but it needs its own evaluation slice
-- **Latency.** A full answer takes about 30 seconds on a GTX 1060: roughly 15 for reranking twenty pairs, the rest for generation. Candidates for speeding it up: reranking the top 10 instead of 20, or a quantised cross-encoder — either changes the configuration and requires re-measuring everything
+- A router for queries that cite an article number directly: lexical lookup beats vector search there, but it needs its own evaluation slice
+- **Latency.** A full answer takes about 30 seconds on a GTX 1060: roughly 15 for reranking twenty pairs, the rest for generation. Candidates for speeding it up: reranking the top 10 instead of 20, or a quantised cross-encoder; either changes the configuration and requires re-measuring everything
 - **The score-based refusal gate does not work on Ruri.** AUC 0.62 between hits and misses; the median top-1 score of a miss (+0.535) is higher than that of a hit (+0.363), because the reranker is confident in a neighbouring article. With 3 natural misses in 50 questions it cannot be re-tuned: revisit when the golden set has at least 10
 - RAGAS, as a cross-check against this project's own metric implementation
 
@@ -319,27 +320,27 @@ Read these before using the numbers.
 
 ## Where the numbers come from
 
-Every figure above is backed by a script in `src/` and a result file in `data/`. The result files are committed: they are measurement records and cannot be regenerated without the full local setup.
+Every figure above is backed by a script in `experiments/` or `src/rag/` and a result file in `data/`. The result files are committed: they are measurement records and cannot be regenerated without the full local setup.
 
 | Claim | Script | Result |
 |---|---|---|
-| Retrieval table (BGE-M3 rows); core vs full corpus, +0.08 | `eval.py` · `eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
-| Hybrid BM25: weight gradient; reranker pool size | `sweep.py` · `sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
-| Embedder comparison (bare vector search) | `embed_compare.py` | `embed_compare.json` |
-| Full pipeline on Ruri: 0.94, 0.96 | `sweep.py --ruri` | `sweep_ruri.json` |
-| HNSW `ef_search` overlap with exact search | `embed_ruri.py check` | console output |
-| Width variants of the query | `perturb_test.py` | console output |
-| Generation metrics, every prompt change (three runs each) | `generate.py --eval` · `compare.py` | `runs.jsonl` · `runs/` |
-| Context assembly: whole articles vs deduplicated chunks | `generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
-| Verbatim-quote check, re-scored on saved answers | `rescore_quotes.py` | `gen_report_quotes_*.json` |
-| Golden-set expansion (rejected) | `expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
-| Judges table; manual annotation of 20 answers | `verify.py --calibrate` · `make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
-| Structural completeness check | `verify.py --structural` | `omission_*.json` |
-| Refusal when the source is absent | `generate.py --ablate` · `score_gate.py` · `margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
-| Indirect prompt injection | `injection_test.py` · `injection_test.py --escape` | `injection.json` · `injection_escape.json` |
-| Context truncation: 0 of 50 prompts cut | `check_ctx.py` | `ctx_check.json` |
+| Retrieval table (BGE-M3 rows); core vs full corpus, +0.08 | `experiments/eval.py` · `experiments/eval_hybrid.py` | `eval_report.json` · `eval_hybrid.json` |
+| Hybrid BM25: weight gradient; reranker pool size | `experiments/sweep.py` · `experiments/sweep.py --pool` | `sweep.json` · `sweep_pool.json` |
+| Embedder comparison (bare vector search) | `experiments/embed_compare.py` | `embed_compare.json` |
+| Full pipeline on Ruri: 0.94, 0.96 | `experiments/sweep.py --ruri` | `sweep_ruri.json` |
+| HNSW `ef_search` overlap with exact search | `rag/index/embed_ruri.py check` | console output |
+| Width variants of the query | `experiments/perturb_test.py` | console output |
+| Generation metrics, every prompt change (three runs each) | `rag/generation/generate.py --eval` · `experiments/compare.py` | `runs.jsonl` · `runs/` |
+| Context assembly: whole articles vs deduplicated chunks | `rag/generation/generate.py --eval` | `gen_report_whole.json` · `gen_report_dedupe.json` · `gen_report_nodedupe.json` |
+| Verbatim-quote check, re-scored on saved answers | `experiments/rescore_quotes.py` | `gen_report_quotes_*.json` |
+| Golden-set expansion (rejected) | `experiments/expand_golden.py` | `golden_proposed.jsonl` · `golden_review.md` |
+| Judges table; manual annotation of 20 answers | `experiments/verify.py --calibrate` · `experiments/make_review.py` | `verify_calibrate_*.json` · `manual_review.md` |
+| Structural completeness check | `experiments/verify.py --structural` | `omission_*.json` |
+| Refusal when the source is absent | `rag/generation/generate.py --ablate` · `experiments/score_gate.py` · `experiments/margin_gate.py` | `gen_report_ablate_*.json` · `score_gate.json` · `margin_gate.json` |
+| Indirect prompt injection | `experiments/injection_test.py` · `experiments/injection_test.py --escape` | `injection.json` · `injection_escape.json` |
+| Context truncation: 0 of 50 prompts cut | `experiments/check_ctx.py` | `ctx_check.json` |
 
-Run fingerprints in `data/runs.jsonl`: `8b80e255` BGE-M3 with the quote prompt · `abda3d7e` Ruri, same prompt · `a47039ed` the rejected over-refusal rule · `cfa11f74` the term hint · `251a4dd9` the adopted configuration (term hint + copy article numbers as written). `compare.py` diffs any two of them question by question.
+Run fingerprints in `data/runs.jsonl`: `8b80e255` BGE-M3 with the quote prompt · `abda3d7e` Ruri, same prompt · `a47039ed` the rejected over-refusal rule · `cfa11f74` the term hint · `251a4dd9` the adopted configuration (term hint + copy article numbers as written). `experiments/compare.py` diffs any two of them question by question.
 
 ---
 
@@ -403,45 +404,28 @@ Every other experiment is listed with its script and result file in *Where the n
 
 ## Repository layout
 
-Every script starts with a docstring that says what it does and how to run it. ▶ marks a script you run; the rest are modules imported by others.
+`uv sync` installs `src/rag` as a package. ▶ marks a module you run with `uv run python -m <module>`; every one starts with a docstring that says what it does.
 
-**Corpus and index** (see *Running it*: system path, then experiments path)
-- ▶ `fetch_manifest.py` — the statute list with pinned revisions (`data/manifest.json`, committed; rerun only to move to newer texts)
-- ▶ `download_laws.py` — statute XML by the pinned revisions
-- ▶ `analyze.py` — corpus statistics the chunking rules were derived from (experiments)
-- ▶ `chunk.py` — three-level chunking
-- ▶ `embed.py` — BGE-M3 vectors through Ollama: the earlier pipeline, experiments only
-- ▶ `db_init.py` — Postgres schema, load, indexes
-- ▶ `embed_compare.py` — embedder comparison on the core slice (experiments; needs the BGE-M3 vectors)
-- ▶ `embed_ruri.py` — Ruri vectors for the whole corpus, HNSW index, `ef_search` check
-
-**Answering**
-- ▶ `generate.py` — retrieval + generation + all answer checks; also `--eval`, `--ablate`, the run log (`data/runs.jsonl`)
-- ▶ `api.py` — FastAPI + SSE over the same pipeline (`uvicorn rag.api:app`); the UI is in `web/`
-
-**Retrieval modules**
-- `config.py` — `.env` loading and the database DSN
-- `hybrid.py` — search in Postgres: vector (Ruri or BGE-M3), BM25, RRF fusion, optional query expansion
-- `rerank.py` — cross-encoder reranking on top of `hybrid.py`
-- `query_expand.py` — the colloquial → statutory dictionary (`data/synonyms.json`); also feeds the term hint
-- `query_llm.py` — LLM query expansion, the fallback to the dictionary; used only by the earlier BGE-M3 pipeline and `sweep.py` (model: `LLM_MODEL`)
-- `search.py` — the first numpy vector search; kept as the baseline that `eval.py` and `embed_compare.py` reproduce
-- `tokenize_ja.py` — Sudachi tokenisation for BM25 · `jnum.py` — Japanese numerals and article references
-
-**Evaluation and experiments** (each one is listed with its result file in *Where the numbers come from*)
-- ▶ `eval.py`, `eval_hybrid.py`, `sweep.py` — retrieval metrics on the golden set
-- ▶ `compare.py` — diff two runs from the log, per question · ▶ `rescore_quotes.py` — re-score saved answers without regenerating
-- ▶ `verify.py` — the judge experiments (`--calibrate`, `--structural`) · ▶ `make_review.py` — the manual annotation form
-- ▶ `score_gate.py`, `margin_gate.py` — refusal thresholds on reranker scores
-- ▶ `injection_test.py` — indirect prompt injection · ▶ `perturb_test.py` — width variants of the query · ▶ `check_ctx.py` — silent context truncation
-- ▶ `expand_golden.py` — the rejected golden-set expansion · ▶ `toc.py` — browse a statute to verify golden answers
-
-**Agent** (see *Extension*)
-- ▶ `agent/loop.py` — bare ReAct loop · ▶ `agent/graph.py` — the LangGraph version with memory · `mcp_server.py` — the tool over MCP (started by an MCP client)
-
-**Other**
-- `tracing.py` — OpenTelemetry spans for Phoenix, content masked by default
-- ▶ `test_*.py` — deterministic tests, no database or LLM needed
+```
+src/rag/
+  config.py        .env, the database DSN, ROOT and DATA
+  data.py          golden.jsonl and chunks.jsonl paths, load_jsonl()
+  text/            jnum (Japanese numerals, article references) · tokenize_ja (Sudachi for BM25)
+                   query_expand (colloquial → statutory dictionary, data/synonyms.json; also the term hint)
+  ingest/          ▶ fetch_manifest · ▶ download_laws · ▶ analyze · ▶ chunk · ▶ toc
+  index/           ▶ db_init (schema, load, indexes) · ▶ embed (BGE-M3, the earlier pipeline)
+                   ▶ embed_ruri (Ruri vectors, HNSW) · encoders (sentence-transformers cache shared with experiments)
+  retrieval/       hybrid (vector, BM25, RRF in Postgres) · rerank (cross-encoder) · query_llm (LLM query expansion)
+  generation/      ▶ generate (answer, --eval, --ablate) · prompts · context (raw / dedupe / whole)
+                   checks (判定, citations, verbatim quotes) · guard (link allow-list) · runs (fingerprint, runs.jsonl)
+  agent/           ▶ loop (bare ReAct) · ▶ graph (LangGraph) · memory (long-term memory) · mcp_server
+  api.py           FastAPI + SSE: uv run uvicorn rag.api:app
+  tracing.py       OpenTelemetry spans for Phoenix, content masked by default
+experiments/       ▶ every measurement behind this README, listed in "Where the numbers come from"
+tests/             pytest: uv run pytest (no database, LLM or model downloads)
+web/               React + Vite UI, served by api.py after npm run build
+data/              corpus, golden set and the committed result files
+```
 
 ## Stack
 
@@ -453,14 +437,14 @@ Python 3.14 · Postgres 17 + pgvector · Ollama (gemma4:e4b; BGE-M3 for the earl
 
 The same retrieval, wrapped as a tool, for questions that span several institutions (「育休中に残業させられる？」 touches both parental leave and working hours). Three forms, built in this order to see what each layer adds.
 
-**`agent/loop.py` — a bare ReAct loop, no framework.** The model decides what to search for and when it has enough; the code decides when to stop. Budgets on iterations, tokens, context growth and wall time, plus a loop detector that measures progress rather than repetition: a search round that brings no new articles counts as a stall, and several in a row stop the loop. A forced final turn when a budget runs out, and a deterministic fallback when the model is unavailable. Tool errors go back to the model as messages it can act on, not as exceptions. The tool searches the core first and widens to the full corpus when the reranker score is low. `test_agent.py` tests the loop detector and the budget as plain code on hand-made inputs — the live 4B model refused or answered before it ever looped, and provoking it into a loop to test a set comparison would be the wrong way round.
+**`agent/loop.py` (a bare ReAct loop, no framework.** The model decides what to search for and when it has enough; the code decides when to stop. Budgets on iterations, tokens, context growth and wall time, plus a loop detector that measures progress rather than repetition: a search round that brings no new articles counts as a stall, and several in a row stop the loop. A forced final turn when a budget runs out, and a deterministic fallback when the model is unavailable. Tool errors go back to the model as messages it can act on, not as exceptions. The tool searches the core first and widens to the full corpus when the reranker score is low. `test_agent.py` tests the loop detector and the budget as plain code on hand-made inputs) the live 4B model refused or answered before it ever looped, and provoking it into a loop to test a set comparison would be the wrong way round.
 
-**`agent/graph.py` — the same agent as a LangGraph state graph.** The `if`s inside the loop become named nodes and edges, which buys three things the loop did not have:
-- **a thread**: follow-up questions in one conversation share state, and old tool output is compacted — conclusions and the article registry stay, raw text goes, so a second question still fits the context
+**`agent/graph.py`; the same agent as a LangGraph state graph.** The `if`s inside the loop become named nodes and edges, which buys three things the loop did not have:
+- **a thread**: follow-up questions in one conversation share state, and old tool output is compacted; conclusions and the article registry stay, raw text goes, so a second question still fits the context
 - **human in the loop**: when retrieval is weak, the graph pauses with `interrupt()` and asks the user to clarify
-- **long-term memory with confirmation**: facts about the user that change the legal answer (prefecture, form of employment, company size) are extracted from what the user said, checked against closed sets, verified to be stated rather than inferred, and saved only after a yes. Memory goes into the system prompt, so anything written there is an injection that survives restarts — hence the closed sets and the confirmation. Isolated per `user_id`; facts older than 90 days are marked for re-confirmation. `test_memory.py`
+- **long-term memory with confirmation**: facts about the user that change the legal answer (prefecture, form of employment, company size) are extracted from what the user said, checked against closed sets, verified to be stated rather than inferred, and saved only after a yes. Memory goes into the system prompt, so anything written there is an injection that survives restarts; hence the closed sets and the confirmation. Isolated per `user_id`; facts older than 90 days are marked for re-confirmation. `test_memory.py`
 
-**`mcp_server.py` — the tool over MCP.** Registered in Claude Desktop, so a different model with a different loop can use the same retrieval. The trade-off is explicit: an MCP client runs its own loop and gets none of the budgets above, and the text the tool returns lands in a client that may hold other tools with real permissions — protection on that side belongs to the client.
+**`mcp_server.py` (the tool over MCP.** Registered in Claude Desktop, so a different model with a different loop can use the same retrieval. The trade-off is explicit: an MCP client runs its own loop and gets none of the budgets above, and the text the tool returns lands in a client that may hold other tools with real permissions) protection on that side belongs to the client.
 
 ```bash
 uv run python -m rag.agent.loop "育休中に残業させられる？"
@@ -469,14 +453,14 @@ uv run pytest tests/test_agent.py
 uv run pytest tests/test_memory.py
 ```
 
-⚠️ The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
+**Note.** The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
 
 ---
 
 ## Related projects
 
-- [dental-agent](https://github.com/Ragebeat/dental-agent) — LangGraph booking agent with its own MCP server; the outcome is scored by the database state, not by an LLM judge.
-- [FormulaFix](https://github.com/Ragebeat/formulafix-llm-eval) — Excel/Sheets formula diagnosis; model comparison with noise control and a hand-audited LLM judge.
+- [dental-agent](https://github.com/Ragebeat/dental-agent); LangGraph booking agent with its own MCP server; the outcome is scored by the database state, not by an LLM judge.
+- [FormulaFix](https://github.com/Ragebeat/formulafix-llm-eval); Excel/Sheets formula diagnosis; model comparison with noise control and a hand-audited LLM judge.
 
 ---
 
