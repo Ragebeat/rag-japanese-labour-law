@@ -21,18 +21,17 @@ over-refusals measured back then.
 """
 
 import json
-import pathlib
 import statistics
 
 import httpx
 
+from rag.config import ROOT
 from rag.generation.context import build_context, retrieve
 from rag.generation.generate import load_golden
 from rag.generation.prompts import MODEL, SYSTEM, URL
 from rag.generation.runs import DEFAULT_MODE, report_path
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "ctx_check.json"
 BIG = 32_768
 TOLERANCE = 8      # tokens; the two counts should be identical when nothing is cut

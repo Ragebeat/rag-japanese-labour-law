@@ -22,18 +22,17 @@ top of that (the embedder and the generator do not fit in 6 GB together).
 import hashlib
 import json
 import os
-import pathlib
 import sys
 import time
 
 import httpx
 
 from rag import tracing
+from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 from rag.text.query_expand import expand
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
 CACHE = ROOT / "data" / "llm_expand_cache.json"
-GOLDEN = ROOT / "data" / "golden.jsonl"
 
 MODEL = os.environ.get("LLM_MODEL", "gemma4:e4b")
 URL = "http://localhost:11434/api/chat"
@@ -221,7 +220,7 @@ def expand_combo(query, client=None, narrow=True):
 
 def warm():
     """Warm the cache over the whole golden set, so the measurement runs fast."""
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     t0 = time.time()
     empty = 0
     with httpx.Client() as c:

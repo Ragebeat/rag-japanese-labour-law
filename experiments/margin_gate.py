@@ -28,14 +28,13 @@ the agent runs, each labelled automatically by whether 第24条 came first.
 """
 
 import json
-import pathlib
 
 from experiments.score_gate import auc, q
+from rag.config import ROOT
 from rag.generation.context import KW, POOL_MULT, TOP_K, dedupe_by_article
 from rag.generation.generate import load_golden
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "margin_gate.json"
 FLOOR = 1e-4          # keeps the ratio finite when top2 is ~0
 

@@ -27,11 +27,11 @@ not allowed.
 """
 
 import json
-import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from rag.config import ROOT
+
 REPORT = ROOT / "data" / "gen_report_whole.json"
 OUT = ROOT / "data" / "manual_review.md"
 

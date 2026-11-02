@@ -12,7 +12,7 @@ from datetime import date
 import pytest
 from langgraph.store.memory import InMemoryStore
 
-from rag.agent.graph import (
+from rag.agent.memory import (
     PREFECTURES,
     _valid,
     canonical_prefecture,

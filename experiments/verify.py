@@ -28,18 +28,17 @@ that has already worked twice (the [N] marker, the 判定 verdict).
 import difflib
 import json
 import os
-import pathlib
 import re
 import sys
 
 import httpx
 
 from experiments.make_review import parse as parse_manual
+from rag.config import ROOT
 from rag.generation.context import _by_article, build_context, retrieve
 from rag.generation.runs import DEFAULT_MODE, report_path
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 URL = "http://localhost:11434/api/chat"
 # The judge must be from a DIFFERENT family than the generator (gemma):
 # the same one would be blind in the same places as the generator.

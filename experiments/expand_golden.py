@@ -29,12 +29,12 @@ just as the formal rule for selecting the core corpus needed manual exceptions.
 
 import collections
 import json
-import pathlib
 import sys
 
+from rag.config import ROOT
+from rag.data import load_jsonl
 from rag.text.jnum import art_key, ref_key
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 CHUNKS = DATA / "chunks.jsonl"
 GOLDEN = DATA / "golden.jsonl"
@@ -96,7 +96,7 @@ def main():
     laws, arts = load_chunks()
     subs = sub_laws(laws)
 
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     review, added_total, hubs = [], 0, {}
 
     for g in golden:

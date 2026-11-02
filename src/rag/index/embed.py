@@ -6,15 +6,15 @@ where it stopped.
 """
 
 import json
-import pathlib
 import random
 import time
 
 import httpx
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-CHUNKS = ROOT / "data" / "chunks.jsonl"
+from rag.config import ROOT
+from rag.data import CHUNKS
+
 VECTORS = ROOT / "data" / "vectors.npy"
 STATE = ROOT / "data" / "embed_state.json"
 

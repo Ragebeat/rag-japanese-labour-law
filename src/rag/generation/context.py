@@ -4,10 +4,8 @@ whole-article modes, and the [N]-numbered context block."""
 import collections
 import json
 
-from rag.config import ROOT
+from rag.data import CHUNKS
 from rag.text.query_expand import synonyms
-
-CHUNKS = ROOT / "data" / "chunks.jsonl"
 
 TOP_K = 5
 

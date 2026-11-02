@@ -21,27 +21,23 @@ on BGE-M3's vectors (hybrid.py). A different model has a different geometry;
 the same ef can drop results silently. Exact numpy top-20 is the reference.
 """
 
-import json
-import pathlib
 import sys
 import time
 
 import numpy as np
 
+from rag.data import CHUNKS, GOLDEN, load_jsonl
 from rag.index.db_init import connect
 from rag.index.encoders import EMB_DIR, MODELS, encode_docs
 from rag.retrieval.hybrid import EMBEDDERS, Hybrid
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-CHUNKS = ROOT / "data" / "chunks.jsonl"
-GOLDEN = ROOT / "data" / "golden.jsonl"
 KEY = "ruri-v3-310m"
 FULL = EMB_DIR / f"{KEY}.full.npy"
 CFG = EMBEDDERS[KEY]
 
 
 def load_meta():
-    return [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
+    return load_jsonl(CHUNKS)
 
 
 def cmd_encode():
@@ -106,7 +102,7 @@ def cmd_check():
     meta = load_meta()
     core = np.array([i for i, c in enumerate(meta) if c["core"]])
     full = np.load(FULL)
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     h = Hybrid(embedder=KEY)
     qv = [h.embed(g["q"]) for g in golden]
 

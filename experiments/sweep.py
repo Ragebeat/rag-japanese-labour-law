@@ -9,15 +9,14 @@ not an improvement.
 """
 
 import json
-import pathlib
 import sys
 import time
 
+from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 from rag.retrieval.hybrid import Hybrid
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "data" / "golden.jsonl"
 OUT = ROOT / "data" / "sweep.json"
 
 BASELINE = 0.820     # recall@5, dictionary + LLM fallback
@@ -111,7 +110,7 @@ def run(h, rr, golden, kw):
 def main():
     only_pool = "--pool" in sys.argv
     ruri = "--ruri" in sys.argv
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     if ruri:
         # One Hybrid per embedder; the config's 4th field picks which.
         engines = {e: Hybrid(embedder=e) for e in ("bge-m3", RURI)}

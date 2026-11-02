@@ -8,12 +8,12 @@ Dropped: SupplProvision (附則, 37.6%), 削除 articles, 読替え articles.
 """
 
 import json
-import pathlib
 import re
 import xml.etree.ElementTree as ET
 from collections import Counter
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
+from rag.config import ROOT
+
 RAW = ROOT / "data" / "raw"
 MANIFEST = ROOT / "data" / "manifest.json"
 OUT = ROOT / "data" / "chunks.jsonl"

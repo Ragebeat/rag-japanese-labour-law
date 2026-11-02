@@ -6,15 +6,14 @@ The vectors are normalised (|v| = 1), so dot equals cosine.
   python -m experiments.search "パワハラ対策？" --core
 """
 
-import json
-import pathlib
 import sys
 
 import httpx
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-CHUNKS = ROOT / "data" / "chunks.jsonl"
+from rag.config import ROOT
+from rag.data import CHUNKS, load_jsonl
+
 VECTORS = ROOT / "data" / "vectors.npy"
 
 MODEL = "bge-m3"
@@ -23,7 +22,7 @@ URL = "http://localhost:11434/api/embed"
 
 class Index:
     def __init__(self):
-        self.meta = [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
+        self.meta = load_jsonl(CHUNKS)
         self.vecs = np.load(VECTORS)
         assert len(self.meta) == len(self.vecs), (
             f"{len(self.meta)} chunks, {len(self.vecs)} vectors — out of sync"

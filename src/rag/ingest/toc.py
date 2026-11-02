@@ -6,11 +6,9 @@
 """
 
 import json
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-CHUNKS = ROOT / "data" / "chunks.jsonl"
+from rag.data import CHUNKS
 
 
 def load():

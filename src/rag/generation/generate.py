@@ -25,15 +25,13 @@ import sys
 import httpx
 
 from rag import tracing
-from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 from rag.generation.checks import inspect, print_quotes, quote_summary
 from rag.generation.context import TOP_K, build_context, retrieve, term_hint
 from rag.generation.guard import guard_links
 from rag.generation.prompts import GEN_OPTIONS, MODEL, SYSTEM, SYSTEM_BASE, SYSTEM_QUOTES, URL
 from rag.generation.runs import DEFAULT_MODE, log_run, report_path
 from rag.retrieval.rerank import Reranked
-
-GOLDEN = ROOT / "data" / "golden.jsonl"
 
 
 def generate(query, chunks, client=None, system=SYSTEM, builder=None):
@@ -64,7 +62,7 @@ def generate(query, chunks, client=None, system=SYSTEM, builder=None):
 
 
 def load_golden():
-    return [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    return load_jsonl(GOLDEN)
 
 
 def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):

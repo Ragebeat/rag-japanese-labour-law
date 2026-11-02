@@ -31,17 +31,16 @@ encoding resumes after an interruption.
 """
 
 import json
-import pathlib
 import sys
 
 import numpy as np
 
 from experiments.eval import first_hit
 from experiments.search import Index
+from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 from rag.index.encoders import MODELS, encode_docs
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "data" / "golden.jsonl"
 OUT = ROOT / "data" / "embed_compare.json"
 
 KS = (1, 5, 10, 20)
@@ -51,7 +50,7 @@ BASELINE = "bge-m3 (ollama)"
 
 
 def load_golden():
-    return [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    return load_jsonl(GOLDEN)
 
 
 def metrics(positions):
@@ -127,7 +126,7 @@ def main():
     golden = load_golden()
     qs = {g["id"]: g["q"] for g in golden}
 
-    all_meta = [json.loads(line) for line in (ROOT / "data" / "chunks.jsonl").open(encoding="utf-8")]
+    all_meta = load_jsonl(ROOT / "data" / "chunks.jsonl")
     core_idx = np.array([i for i, c in enumerate(all_meta) if c["core"]])
     meta = [all_meta[i] for i in core_idx]
     texts = [c["text"] for c in meta]

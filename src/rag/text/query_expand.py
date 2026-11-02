@@ -18,10 +18,10 @@ query_llm.py): the dictionary for the frequent cases, the model for the rest.
 """
 
 import json
-import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
+from rag.config import ROOT
+
 DICT_PATH = ROOT / "data" / "synonyms.json"
 
 _syn = None

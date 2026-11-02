@@ -9,8 +9,6 @@ Indexes are built AFTER loading. Building them first means rebuilding the
 tree on every INSERT.
 """
 
-import json
-import pathlib
 import sys
 import time
 
@@ -18,11 +16,13 @@ import numpy as np
 import psycopg
 from pgvector.psycopg import register_vector
 
-from rag.config import DSN  # loads .env
+from rag.config import (
+    DSN,  # loads .env
+    ROOT,
+)
+from rag.data import CHUNKS, load_jsonl
 from rag.text.tokenize_ja import to_tsvector_text
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
-CHUNKS = ROOT / "data" / "chunks.jsonl"
 VECTORS = ROOT / "data" / "vectors.npy"
 
 SCHEMA = """
@@ -89,7 +89,7 @@ def cmd_schema():
 
 
 def cmd_load():
-    meta = [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
+    meta = load_jsonl(CHUNKS)
     if VECTORS.exists():
         vecs = np.load(VECTORS)
         assert len(meta) == len(vecs), f"{len(meta)} chunks vs {len(vecs)} vectors"

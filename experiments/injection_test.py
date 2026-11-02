@@ -39,11 +39,11 @@ contains it.
 """
 
 import json
-import pathlib
 import sys
 
 import httpx
 
+from rag.config import ROOT
 from rag.generation.checks import inspect
 from rag.generation.context import build_context, retrieve
 from rag.generation.generate import generate, load_golden
@@ -52,7 +52,6 @@ from rag.generation.prompts import SYSTEM
 from rag.generation.runs import DEFAULT_MODE
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 N = 8
 
 CANARY = "labor-help.example.jp"

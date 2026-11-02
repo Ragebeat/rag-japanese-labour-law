@@ -18,7 +18,6 @@ rewording of the query.
 
 import concurrent.futures as cf
 import json
-import pathlib
 import statistics
 import sys
 import time
@@ -27,6 +26,7 @@ from itertools import pairwise
 import httpx
 
 from rag import tracing
+from rag.config import ROOT
 from rag.generation.context import KW, POOL_MULT, _by_article, dedupe_by_article, whole_article
 from rag.generation.guard import guard_links
 from rag.generation.prompts import MODEL, URL
@@ -34,7 +34,6 @@ from rag.retrieval.query_llm import expand_combo
 from rag.retrieval.rerank import Reranked
 from rag.text.query_expand import expand
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
 GATE = ROOT / "data" / "score_gate.json"
 
 

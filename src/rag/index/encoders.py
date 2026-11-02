@@ -5,12 +5,12 @@ here so that embed_ruri (index) and experiments/embed_compare read one copy.
 """
 
 import json
-import pathlib
 import time
 
 import numpy as np
 
-ROOT = pathlib.Path(__file__).resolve().parents[3]
+from rag.config import ROOT
+
 EMB_DIR = ROOT / "data" / "emb"
 SLICE = 128          # chunks per encode call between checkpoints
 

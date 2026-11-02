@@ -6,13 +6,12 @@ Baseline (vector search in numpy, exact scan): recall@5 = 0.68 core, 0.60 all.
 """
 
 import json
-import pathlib
 import time
 
+from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 from rag.retrieval.hybrid import Hybrid
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "data" / "golden.jsonl"
 OUT = ROOT / "data" / "eval_hybrid.json"
 
 KS = (1, 3, 5, 10)
@@ -47,7 +46,7 @@ def run(h, golden, mode, core_only):
 
 
 def main():
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     h = Hybrid()
     print(f"questions: {len(golden)}\n")
 

@@ -22,14 +22,13 @@ of the group with a source), and only then do we look at what came out.
 """
 
 import json
-import pathlib
 import statistics
 
+from rag.config import ROOT
 from rag.generation.context import KW, POOL_MULT, TOP_K, dedupe_by_article
 from rag.generation.generate import load_golden
 from rag.retrieval.rerank import Reranked
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "score_gate.json"
 
 

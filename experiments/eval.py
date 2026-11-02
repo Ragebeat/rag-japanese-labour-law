@@ -8,12 +8,11 @@ enough. MRR: the mean of 1/position of the first hit.
 """
 
 import json
-import pathlib
 
 from experiments.search import Index
+from rag.config import ROOT
+from rag.data import GOLDEN, load_jsonl
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-GOLDEN = ROOT / "data" / "golden.jsonl"
 OUT = ROOT / "data" / "eval_report.json"
 
 KS = (1, 3, 5, 10)
@@ -49,7 +48,7 @@ def run(idx, golden, core_only):
 
 
 def main():
-    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
+    golden = load_jsonl(GOLDEN)
     idx = Index()
     print(f"questions: {len(golden)}   chunks: {len(idx.meta)} "
           f"(core {int(idx.core_mask.sum())})\n")

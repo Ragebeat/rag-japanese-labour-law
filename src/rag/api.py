@@ -27,7 +27,6 @@ import asyncio
 import functools
 import json
 import logging
-import pathlib
 
 import anyio
 import httpx
@@ -36,6 +35,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from rag.config import ROOT
 from rag.generation.checks import inspect
 from rag.generation.context import TOP_K, build_context, retrieve
 from rag.generation.guard import StreamGuard, guard_links
@@ -294,6 +294,6 @@ async def _answer_frames(req):
 # The built front end, if present. Mounted last so it does not intercept
 # /ask and /health. In development the UI runs on Vite (proxying to :8000),
 # for a demo: npm run build and everything serves from one port.
-_dist = pathlib.Path(__file__).resolve().parents[2] / "web" / "dist"
+_dist = ROOT / "web" / "dist"
 if _dist.exists():
     app.mount("/", StaticFiles(directory=_dist, html=True), name="web")
