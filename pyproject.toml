@@ -31,3 +31,11 @@ dependencies = [
 #    together). A resident 2 GB cross-encoder would push gemma partly onto
 #    the CPU: a faster rerank for a slower generation.
 # All measurements in the README were made with the reranker on the CPU.
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "UP"]
+ignore = ["E501"]

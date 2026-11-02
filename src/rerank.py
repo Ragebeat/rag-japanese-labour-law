@@ -24,9 +24,9 @@ import sys
 import unicodedata
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import tracing  # noqa: E402
 from hybrid import Hybrid  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
-import tracing  # noqa: E402
 
 MODEL = "BAAI/bge-reranker-v2-m3"
 # Pinned commit on Hugging Face (OWASP: supply chain). Without it the
@@ -99,7 +99,7 @@ class Reranked:
                 "reranker.input_chars": sum(len(t) for _, t in pairs)}):
             scores = _get().predict(pairs, show_progress_bar=False)
 
-        for c, s, old in zip(cands, scores, range(1, len(cands) + 1)):
+        for old, (c, s) in enumerate(zip(cands, scores, strict=True), start=1):
             c["rerank_score"] = float(s)
             c["rank_before"] = old
         cands.sort(key=lambda c: -c["rerank_score"])

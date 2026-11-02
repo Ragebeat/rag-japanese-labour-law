@@ -23,11 +23,10 @@ import psycopg
 from pgvector.psycopg import register_vector
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from tokenize_ja import tokenize  # noqa: E402
-from query_expand import expand  # noqa: E402
-from query_llm import expand_llm, expand_combo  # noqa: E402
-
 from env import DSN  # noqa: E402  (.env is loaded there)
+from query_expand import expand  # noqa: E402
+from query_llm import expand_combo, expand_llm  # noqa: E402
+from tokenize_ja import tokenize  # noqa: E402
 
 MODEL = "bge-m3"
 OLLAMA = "http://localhost:11434/api/embed"
@@ -156,7 +155,7 @@ class Hybrid:
     def _rows(self, sql, params):
         cur = self.conn.execute(sql, params)
         cols = [d.name for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
     def _fuse(self, lists, weights):
         """RRF over several rankings."""

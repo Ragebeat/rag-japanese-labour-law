@@ -49,7 +49,7 @@ def run(h, golden, mode, core_only):
 
 
 def main():
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     h = Hybrid()
     print(f"questions: {len(golden)}\n")
 

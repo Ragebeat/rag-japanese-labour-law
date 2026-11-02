@@ -22,16 +22,25 @@ import pathlib
 import statistics
 import sys
 import time
+from itertools import pairwise
 
 import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from generate import (KW, MODEL, POOL_MULT, URL, _by_article,  # noqa: E402
-                      dedupe_by_article, guard_links, whole_article)
+import tracing  # noqa: E402
+from generate import (  # noqa: E402
+    KW,
+    MODEL,
+    POOL_MULT,
+    URL,
+    _by_article,
+    dedupe_by_article,
+    guard_links,
+    whole_article,
+)
 from query_expand import expand  # noqa: E402
 from query_llm import expand_combo  # noqa: E402
 from rerank import Reranked  # noqa: E402
-import tracing  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = ROOT / "data" / "score_gate.json"
@@ -492,7 +501,7 @@ def _run(question, tool, trace=False):
                              "content": json.dumps(payload, ensure_ascii=False)})
 
                 errored = False
-                for r, t, e in zip(payload["results"], tops, exps):
+                for r, t, e in zip(payload["results"], tops, exps, strict=False):
                     top_s = f"{t:.3f}" if t is not None else "—"
                     log(f"  → {r['query']!r} | {r['status']} top={top_s}"
                         f"{' widened' if r.get('widened') else ''}")
@@ -581,7 +590,7 @@ def main():
     p = res["prompts"]
     if len(p) < 2:
         print(f"prompt_eval_count: {p} — fewer than two tool calls, the check says nothing")
-    elif any(b < a for a, b in zip(p, p[1:])):
+    elif any(b < a for a, b in pairwise(p)):
         print(f"⚠ prompt_eval_count is not monotonic: {p} — the token budget is wrong")
     else:
         print(f"prompt_eval_count is monotonic: {p}")

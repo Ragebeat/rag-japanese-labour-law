@@ -20,8 +20,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from generate import (DEFAULT_MODE, VERDICT_RE, _by_article,  # noqa: E402
-                      check_quotes, quote_summary, report_path)
+from generate import DEFAULT_MODE, VERDICT_RE, _by_article, check_quotes, quote_summary, report_path  # noqa: E402
 
 
 def rebuild(context, arts):

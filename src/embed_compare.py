@@ -71,7 +71,7 @@ def _dim(model):
     return get()
 
 def load_golden():
-    return [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    return [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
 
 
 def metrics(positions):
@@ -149,7 +149,7 @@ def run_model(key, golden, texts, meta):
     qv = model.encode([qp + g["q"] for g in golden], batch_size=16,
                       normalize_embeddings=True, show_progress_bar=False)
     rows = [{"id": g["id"], "pos": first_hit(ranked(vecs, q, meta), g["relevant"])}
-            for g, q in zip(golden, qv)]
+            for g, q in zip(golden, qv, strict=True)]
     return rows, {"hf_id": hf_id, "query_prefix": qp, "doc_prefix": dp,
                   "revision": rev, "window": limit, "truncated": cut}
 
@@ -175,7 +175,7 @@ def main():
     golden = load_golden()
     qs = {g["id"]: g["q"] for g in golden}
 
-    all_meta = [json.loads(l) for l in (ROOT / "data" / "chunks.jsonl").open(encoding="utf-8")]
+    all_meta = [json.loads(line) for line in (ROOT / "data" / "chunks.jsonl").open(encoding="utf-8")]
     core_idx = np.array([i for i, c in enumerate(all_meta) if c["core"]])
     meta = [all_meta[i] for i in core_idx]
     texts = [c["text"] for c in meta]

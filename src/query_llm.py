@@ -29,8 +29,8 @@ import time
 import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from query_expand import expand  # noqa: E402
 import tracing  # noqa: E402
+from query_expand import expand  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CACHE = ROOT / "data" / "llm_expand_cache.json"
@@ -222,7 +222,7 @@ def expand_combo(query, client=None, narrow=True):
 
 def warm():
     """Warm the cache over the whole golden set, so the measurement runs fast."""
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     t0 = time.time()
     empty = 0
     with httpx.Client() as c:

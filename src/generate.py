@@ -34,11 +34,12 @@ from datetime import datetime
 import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rerank import Reranked  # noqa: E402
 import hybrid  # noqa: E402
-from jnum import NUM, art_key, fmt as _fmt, num  # noqa: E402
 import tracing  # noqa: E402
+from jnum import NUM, art_key, num  # noqa: E402
+from jnum import fmt as _fmt
 from query_expand import synonyms  # noqa: E402
+from rerank import Reranked  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 GOLDEN = ROOT / "data" / "golden.jsonl"
@@ -268,8 +269,8 @@ def term_hint(query):
     expands the query; the generator used to see only the raw question and
     refused #22 (失業保険 vs 基本手当 in the article). First term only,
     as in narrow mode: a long tail dilutes."""
-    pairs = [f"{s}＝{l[0]}" for s, l in synonyms().items()
-             if s in query and l[0] not in query]
+    pairs = [f"{s}＝{terms[0]}" for s, terms in synonyms().items()
+             if s in query and terms[0] not in query]
     return "\n\n【用語の対応】" + "、".join(pairs) if pairs else ""
 
 
@@ -333,7 +334,7 @@ def inspect(answer, chunks):
     caught here, and neither is "the right article was in the context but the
     model did not use it". Those need human annotation.
     """
-    lines = [l for l in answer.splitlines() if l.strip()]
+    lines = [ln for ln in answer.splitlines() if ln.strip()]
     head = lines[0] if lines else ""
 
     m = VERDICT_RE.search(head)
@@ -500,7 +501,7 @@ def check_quotes(body, chunks):
     # Paragraph maps, where the paragraph structure is known: an assembled
     # article carries "paragraphs"; a single-paragraph chunk its own number.
     pmaps = []
-    for c, t in zip(chunks, texts):
+    for c, t in zip(chunks, texts, strict=True):
         if c.get("paragraphs"):
             pmaps.append({k: _norm(v) for k, v in c["paragraphs"].items()})
         elif c.get("paragraph_num") and str(c["paragraph_num"]).isdigit():
@@ -698,7 +699,7 @@ def retrieve(r, query, mode="dedupe", k=TOP_K, exclude=None):
 
 
 def load_golden():
-    return [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    return [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
 
 
 def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):
@@ -940,7 +941,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
     print("                     回答可能   回答不可")
     print(f"  A: article found    {len(q(True, 'ok')):>5}   {len(over):>5}  ← over-refusal")
     print(f"  B: article absent   {len(blind):>5}   {len(q(False, 'no')):>5}")
-    print(f"                     ↑ answered without the source")
+    print("                     ↑ answered without the source")
     if miss:
         print(f"  refusal on a miss:  {len(q(False, 'no')) / len(miss):.2f}   (higher is better)")
     if hits:
@@ -1018,7 +1019,7 @@ def cmd_ablate(mode=DEFAULT_MODE):
     print("              回答可能   回答不可")
     print(f"  回答可能      {cell('ok', 'ok'):>5}   {cell('ok', 'no'):>5}  ← noticed the loss")
     print(f"  回答不可      {cell('no', 'ok'):>5}   {cell('no', 'no'):>5}")
-    print(f"              ↑ did not notice")
+    print("              ↑ did not notice")
 
     out = report_path(mode, "_ablate")
     out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")

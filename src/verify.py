@@ -35,8 +35,7 @@ import sys
 import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from generate import (DEFAULT_MODE, Reranked, build_context,  # noqa: E402
-                      report_path, retrieve, _by_article)
+from generate import DEFAULT_MODE, Reranked, _by_article, build_context, report_path, retrieve  # noqa: E402
 from make_review import parse as parse_manual  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent

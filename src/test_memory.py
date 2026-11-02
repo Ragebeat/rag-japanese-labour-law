@@ -13,9 +13,17 @@ from datetime import date
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from langgraph.store.memory import InMemoryStore  # noqa: E402
-from agent_graph import (PREFECTURES, _valid, canonical_prefecture,  # noqa: E402
-                         check_owner, memory_file, namespace, profile,
-                         system_prompt)
+
+from agent_graph import (  # noqa: E402
+    PREFECTURES,
+    _valid,
+    canonical_prefecture,
+    check_owner,
+    memory_file,
+    namespace,
+    profile,
+    system_prompt,
+)
 
 CASES = [
     ("群馬県", "群馬で働いてます", "群馬県"),

@@ -53,8 +53,7 @@ def asciiq(q):
 VARIANTS = {"zen": zen, "kana": kana, "asciiq": asciiq}
 
 gold = g.load_golden()
-data = json.load(open(g.ROOT / "data" / "gen_report_quotes_whole.json",
-                      encoding="utf-8"))
+data = json.loads((g.ROOT / "data" / "gen_report_quotes_whole.json").read_text(encoding="utf-8"))
 rows = data if isinstance(data, list) else data.get("rows", data)
 base = {x["id"]: x["hit"] for x in rows}
 

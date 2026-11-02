@@ -26,8 +26,17 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from generate import (ROOT, RUNS_LOG, VERDICT_RE, _by_article, _fmt,  # noqa: E402
-                      art_key, check_quotes, load_golden, run_metrics)
+from generate import (  # noqa: E402
+    ROOT,
+    RUNS_LOG,
+    VERDICT_RE,
+    _by_article,
+    _fmt,
+    art_key,
+    check_quotes,
+    load_golden,
+    run_metrics,
+)
 from rescore_quotes import rebuild  # noqa: E402
 
 # Which way is better, per metric. None: informational only.

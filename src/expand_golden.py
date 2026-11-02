@@ -97,7 +97,7 @@ def main():
     laws, arts = load_chunks()
     subs = sub_laws(laws)
 
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     review, added_total, hubs = [], 0, {}
 
     for g in golden:

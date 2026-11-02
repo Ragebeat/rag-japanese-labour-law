@@ -10,7 +10,6 @@ tree on every INSERT.
 """
 
 import json
-import os
 import pathlib
 import sys
 import time
@@ -91,7 +90,7 @@ def cmd_schema():
 
 
 def cmd_load():
-    meta = [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
+    meta = [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
     if VECTORS.exists():
         vecs = np.load(VECTORS)
         assert len(meta) == len(vecs), f"{len(meta)} chunks vs {len(vecs)} vectors"
@@ -102,29 +101,28 @@ def cmd_load():
 
     t0 = time.time()
     with connect() as conn:
-        with conn.cursor() as cur:
-            with cur.copy(
-                "COPY chunks (id, chunk_id, text, law_id, law_title, law_type,"
-                " core, article_num, article_title, article_caption,"
-                " paragraph_num, item_num, level, n_chars, embedding, tokens)"
-                " FROM STDIN WITH (FORMAT BINARY)"
-            ) as copy:
-                copy.set_types([
-                    "int4", "text", "text", "text", "text", "text",
-                    "bool", "text", "text", "text",
-                    "text", "text", "int2", "int4", "vector", "text",
-                ])
-                for i, (c, v) in enumerate(zip(meta, vecs)):
-                    copy.write_row((
-                        i, c["chunk_id"], c["text"], c["law_id"],
-                        c["law_title"], c["law_type"], c["core"],
-                        c["article_num"], c["article_title"],
-                        c["article_caption"], c["paragraph_num"],
-                        c["item_num"], c["level"], c["n_chars"],
-                        v, to_tsvector_text(c["text"]),
-                    ))
-                    if i % 2000 == 0:
-                        print(f"  {i}/{len(meta)}  {time.time()-t0:.0f}s")
+        with conn.cursor() as cur, cur.copy(
+            "COPY chunks (id, chunk_id, text, law_id, law_title, law_type,"
+            " core, article_num, article_title, article_caption,"
+            " paragraph_num, item_num, level, n_chars, embedding, tokens)"
+            " FROM STDIN WITH (FORMAT BINARY)"
+        ) as copy:
+            copy.set_types([
+                "int4", "text", "text", "text", "text", "text",
+                "bool", "text", "text", "text",
+                "text", "text", "int2", "int4", "vector", "text",
+            ])
+            for i, (c, v) in enumerate(zip(meta, vecs, strict=True)):
+                copy.write_row((
+                    i, c["chunk_id"], c["text"], c["law_id"],
+                    c["law_title"], c["law_type"], c["core"],
+                    c["article_num"], c["article_title"],
+                    c["article_caption"], c["paragraph_num"],
+                    c["item_num"], c["level"], c["n_chars"],
+                    v, to_tsvector_text(c["text"]),
+                ))
+                if i % 2000 == 0:
+                    print(f"  {i}/{len(meta)}  {time.time()-t0:.0f}s")
         conn.commit()
     print(f"loaded {len(meta)} in {(time.time()-t0)/60:.1f} min")
 

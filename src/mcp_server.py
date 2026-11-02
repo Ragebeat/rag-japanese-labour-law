@@ -29,9 +29,8 @@ import sys
 import threading
 from typing import Annotated
 
-from pydantic import Field
-
 from mcp.server import MCPServer
+from pydantic import Field
 
 SRC = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SRC))

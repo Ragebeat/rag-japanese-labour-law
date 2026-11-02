@@ -49,7 +49,7 @@ def run(idx, golden, core_only):
 
 
 def main():
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     idx = Index()
     print(f"questions: {len(golden)}   chunks: {len(idx.meta)} "
           f"(core {int(idx.core_mask.sum())})\n")

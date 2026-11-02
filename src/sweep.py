@@ -112,7 +112,7 @@ def run(h, rr, golden, kw):
 def main():
     only_pool = "--pool" in sys.argv
     ruri = "--ruri" in sys.argv
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     if ruri:
         # One Hybrid per embedder; the config's 4th field picks which.
         engines = {e: Hybrid(embedder=e) for e in ("bge-m3", RURI)}

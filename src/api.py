@@ -39,9 +39,19 @@ from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import rerank  # noqa: E402
-from generate import (DEFAULT_MODE, GEN_OPTIONS, MODEL, SYSTEM,  # noqa: E402
-                      TOP_K, Reranked, StreamGuard, build_context,
-                      guard_links, inspect, retrieve)
+from generate import (  # noqa: E402
+    DEFAULT_MODE,
+    GEN_OPTIONS,
+    MODEL,
+    SYSTEM,
+    TOP_K,
+    Reranked,
+    StreamGuard,
+    build_context,
+    guard_links,
+    inspect,
+    retrieve,
+)
 
 OLLAMA = "http://localhost:11434/api/chat"
 MAX_WAITING = 3        # behind the one being served; ~1 min each on this machine

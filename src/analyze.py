@@ -108,7 +108,7 @@ def main():
     print(f"本則 {main_chars} chars / 附則 {suppl_chars} chars  →附則 = {suppl_chars / max(total, 1) * 100:.1f}%")
 
     print("\nlongest articles:")
-    for n, law_id, num, title, cap in sorted(big_articles, reverse=True)[:10]:
+    for n, law_id, _num, title, cap in sorted(big_articles, reverse=True)[:10]:
         print(f"  {n:>6}  {law_id}  {title}{cap}")
 
     # characters -> tokens on the real corpus

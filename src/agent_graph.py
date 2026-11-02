@@ -64,11 +64,27 @@ from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, interrupt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from agent import (FINAL_BASE, FINAL_DEFAULT, FINAL_HEAD, LLM_TIMEOUT,  # noqa: E402
-                   MODEL, NUDGE, REFRAME, STALL_MAX, SYSTEM, THRESHOLD,
-                   TOOL_NAME, URL, Budget, Progress, Tool, _error, chat,
-                   fallback)
 import tracing  # noqa: E402
+from agent import (  # noqa: E402
+    FINAL_BASE,
+    FINAL_DEFAULT,
+    FINAL_HEAD,
+    LLM_TIMEOUT,
+    MODEL,
+    NUDGE,
+    REFRAME,
+    STALL_MAX,
+    SYSTEM,
+    THRESHOLD,
+    TOOL_NAME,
+    URL,
+    Budget,
+    Progress,
+    Tool,
+    _error,
+    chat,
+    fallback,
+)
 from generate import guard_links  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -366,7 +382,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
                          "content": json.dumps(payload, ensure_ascii=False)})
 
             errored = False
-            for r, t, e in zip(payload["results"], tops, exps):
+            for r, t, e in zip(payload["results"], tops, exps, strict=False):
                 top_s = f"{t:.3f}" if t is not None else "—"
                 log(f"[tools] {r['query']!r} | {r['status']} top={top_s}"
                     f"{' widened' if r.get('widened') else ''}")

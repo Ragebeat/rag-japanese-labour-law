@@ -29,9 +29,9 @@ import time
 import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from db_init import connect  # noqa: E402
 from embed_compare import EMB_DIR, MODELS, encode_docs  # noqa: E402
 from hybrid import EMBEDDERS, Hybrid  # noqa: E402
-from db_init import connect  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHUNKS = ROOT / "data" / "chunks.jsonl"
@@ -42,7 +42,7 @@ CFG = EMBEDDERS[KEY]
 
 
 def load_meta():
-    return [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
+    return [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
 
 
 def cmd_encode():
@@ -81,11 +81,11 @@ def cmd_load():
         # COPY into a temp table, then one UPDATE by id: 20k single-row
         # UPDATEs would take minutes.
         conn.execute(f"CREATE TEMP TABLE ruri_tmp (id int4, v vector({CFG['dim']}))")
-        with conn.cursor() as cur:
-            with cur.copy("COPY ruri_tmp (id, v) FROM STDIN WITH (FORMAT BINARY)") as cp:
-                cp.set_types(["int4", "vector"])
-                for i, v in enumerate(full):    # id = row number, as in db_init
-                    cp.write_row((i, v))
+        with (conn.cursor() as cur,
+              cur.copy("COPY ruri_tmp (id, v) FROM STDIN WITH (FORMAT BINARY)") as cp):
+            cp.set_types(["int4", "vector"])
+            for i, v in enumerate(full):    # id = row number, as in db_init
+                cp.write_row((i, v))
         conn.execute(f"UPDATE chunks c SET {CFG['column']} = t.v "
                      f"FROM ruri_tmp t WHERE c.id = t.id")
         missing = conn.execute(f"SELECT count(*) FROM chunks "
@@ -107,7 +107,7 @@ def cmd_check():
     meta = load_meta()
     core = np.array([i for i, c in enumerate(meta) if c["core"]])
     full = np.load(FULL)
-    golden = [json.loads(l) for l in GOLDEN.open(encoding="utf-8") if l.strip()]
+    golden = [json.loads(line) for line in GOLDEN.open(encoding="utf-8") if line.strip()]
     h = Hybrid(embedder=KEY)
     qv = [h.embed(g["q"]) for g in golden]
 
@@ -120,7 +120,7 @@ def cmd_check():
     for ef in (40, 100, 200, 400):
         h.conn.execute(f"SET hnsw.ef_search = {ef}")
         overlaps = []
-        for q, ex in zip(qv, exact):
+        for q, ex in zip(qv, exact, strict=True):
             rows = h.conn.execute(
                 f"SELECT id FROM chunks WHERE core "
                 f"ORDER BY {CFG['column']} <#> %s LIMIT 20", (q,)).fetchall()

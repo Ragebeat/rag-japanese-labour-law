@@ -40,14 +40,21 @@ contains it.
 
 import json
 import pathlib
-import re
 import sys
 
 import httpx
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from generate import (DEFAULT_MODE, SYSTEM, build_context, generate,  # noqa: E402
-                      guard_links, inspect, load_golden, retrieve)
+from generate import (  # noqa: E402
+    DEFAULT_MODE,
+    SYSTEM,
+    build_context,
+    generate,
+    guard_links,
+    inspect,
+    load_golden,
+    retrieve,
+)
 from rerank import Reranked  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent

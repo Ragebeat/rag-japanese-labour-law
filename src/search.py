@@ -23,7 +23,7 @@ URL = "http://localhost:11434/api/embed"
 
 class Index:
     def __init__(self):
-        self.meta = [json.loads(l) for l in CHUNKS.open(encoding="utf-8")]
+        self.meta = [json.loads(line) for line in CHUNKS.open(encoding="utf-8")]
         self.vecs = np.load(VECTORS)
         assert len(self.meta) == len(self.vecs), (
             f"{len(self.meta)} chunks, {len(self.vecs)} vectors — out of sync"
