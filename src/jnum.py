@@ -1,4 +1,4 @@
-"""Japanese numerals and article references — shared parsing.
+"""Japanese numerals and article references: shared parsing.
 
 Lifted out of generate.py: expand_golden.py uses the same parsing, and
 pulling the whole search pipeline in there for two functions makes no sense.
@@ -61,7 +61,7 @@ def art_key(text):
 
 
 def ref_key(text):
-    """Only references of the form 法第N条 — to the parent statute."""
+    """Only references of the form 法第N条: to the parent statute."""
     return _keys(REF_RE, text)
 
 

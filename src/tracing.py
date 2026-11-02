@@ -12,21 +12,21 @@ and this project calls Ollama over plain httpx. Spans are OpenTelemetry
 setting: Phoenix now, Langfuse later, same code.
 
 Opt-in. Without TRACE=1 the tracer is OpenTelemetry's no-op and nothing is
-sent — evaluation runs do not depend on a tracing server being up.
+sent: evaluation runs do not depend on a tracing server being up.
 
   docker run -d -p 127.0.0.1:6006:6006 --name phoenix arizephoenix/phoenix@sha256:d55a4ffac8c670e2d0bf72e44e81e32a73e832b7ce449e6e4567487adfa9d8d6
   $env:TRACE=1; uv run python src/agent.py "有給はいつから？"
   -> http://localhost:6006
 
 Pinned by digest, not :latest (supply chain): a tag can be moved
-to a different image, a digest cannot. 127.0.0.1 — traces are not for the LAN.
+to a different image, a digest cannot. 127.0.0.1: traces are not for the LAN.
 
 Content is OFF by default (OWASP review). Traces kept every
 message whole: user questions, the system prompt, and in agent_graph the
-long-term memory inside it — stored with no retention and no auth, on a
+long-term memory inside it: stored with no retention and no auth, on a
 port published to the whole LAN. Every finding from traces so far came
 from metadata (durations, tokens, load_ms, pair counts); content is needed
-only to debug behaviour — what the model searched, why it refused. So:
+only to debug behaviour; what the model searched, why it refused. So:
 metadata always, content on purpose:
 
   $env:TRACE_CONTENT=1   # questions, prompts, answers, tool arguments
@@ -55,12 +55,12 @@ ENABLED = os.environ.get("TRACE") == "1"
 PROJECT = os.environ.get("TRACE_PROJECT", "labor-rag")
 # HTTP on the UI port, set explicitly. register()'s default is gRPC on 4317:
 # the first run pointed at it, only 6006 was published from Docker, and the
-# exporter retried synchronously on every span — slowing the agent itself.
+# exporter retried synchronously on every span: slowing the agent itself.
 ENDPOINT = os.environ.get("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces")
 MAX_TEXT = 8000          # characters per attribute; whole articles are longer
 
 # What counts as content: anything the user typed or the model wrote, and
-# anything carrying them — the query the reranker saw, the expansion terms
+# anything carrying them: the query the reranker saw, the expansion terms
 # (derived from the question), tool-call arguments.
 CONTENT = os.environ.get("TRACE_CONTENT") == "1"
 CONTENT_KEYS = {"input.value", "output.value", "reranker.query", "rag.expansion.terms"}
@@ -104,7 +104,7 @@ def _redact(v):
 
 
 def set_attrs(sp, attrs):
-    """The ONE place attributes are written — the content mask lives here,
+    """The ONE place attributes are written: the content mask lives here,
     so no caller can bypass it by accident."""
     for k, v in (attrs or {}).items():
         if v is None:
@@ -117,7 +117,7 @@ def set_attrs(sp, attrs):
 @contextlib.contextmanager
 def span(name, kind, input=None, attrs=None):
     """A span of an OpenInference kind: AGENT, CHAIN, LLM, TOOL, RETRIEVER,
-    EMBEDDING, RERANKER. Status is set explicitly — a manual span otherwise
+    EMBEDDING, RERANKER. Status is set explicitly: a manual span otherwise
     exports as UNSET, neither success nor failure."""
     with _tracer.start_as_current_span(name) as sp:
         sp.set_attribute("openinference.span.kind", kind)
@@ -194,7 +194,7 @@ def documents(sp, chunks, key="retrieval.documents"):
 
 
 def carry(fn):
-    """Wrap fn to run in the CALLER's trace context — for thread pools.
+    """Wrap fn to run in the CALLER's trace context: for thread pools.
     The context is captured now, at submit time, not when the worker runs."""
     ctx = otel_context.get_current()
 

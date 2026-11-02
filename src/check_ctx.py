@@ -3,18 +3,18 @@
 generate() sends no num_ctx. Current Ollama picks the default window from
 VRAM: 4096 tokens below ~24 GiB. One user message holds five whole articles
 and the question; if it does not fit, Ollama trims it WITHOUT an error, and
-the answer still reads fine. If it trims the front, the loss is article [1] —
+the answer still reads fine. If it trims the front, the loss is article [1]:
 the one the reranker ranked highest.
 
 The check: build exactly the prompt generate() builds, for every golden
-question, and ask Ollama for ONE token twice — with the default window and
+question, and ask Ollama for ONE token twice: with the default window and
 with a large one. A different prompt_eval_count means that prompt was cut.
 
 Two passes, not alternating per question: changing num_ctx reloads the
 model, and alternating would reload it a hundred times.
 
 If the base-prompt report (gen_report_whole.json) exists, truncated questions are matched with their
-recorded hit / verdict — to see whether truncation explains any of the
+recorded hit / verdict: to see whether truncation explains any of the
 over-refusals measured back then.
 
   uv run python src/check_ctx.py
@@ -47,7 +47,7 @@ TOLERANCE = 8      # tokens; the two counts should be identical when nothing is 
 
 
 def messages(q, chunks):
-    # Byte for byte what generate() sends — otherwise we measure another prompt.
+    # Byte for byte what generate() sends; otherwise we measure another prompt.
     return [{"role": "system", "content": SYSTEM},
             {"role": "user",
              "content": f"【条文】\n{build_context(chunks)}\n\n【質問】\n{q}"}]
@@ -84,7 +84,7 @@ def main():
     print(f"\ngeneration prompt size, tokens: min {min(full)} · "
           f"median {int(statistics.median(full))} · max {max(full)}")
     if max(full) > BIG * 0.95:
-        print(f"⚠ even {BIG} is borderline — the \"big\" pass itself may have truncated")
+        print(f"WARNING: even {BIG} is borderline; the \"big\" pass itself may have truncated")
 
     print(f"\ntruncated: {len(cut)}/{len(rows)}")
     if not cut:
@@ -110,7 +110,7 @@ def main():
             over = [x for x in cut if base.get(x["id"], {}).get("hit")
                     and base[x["id"]].get("verdict") == "no"]
             if over:
-                print(f"\n⚠ {len(over)} of the truncated are earlier over-refusals "
+                print(f"\nWARNING: {len(over)} of the truncated are earlier over-refusals "
                       f"(article found, model refused): "
                       + ", ".join(f"#{x['id']}" for x in over)
                       + "\n  Candidate explanation: the model simply never saw the article")

@@ -1,24 +1,24 @@
 """The verification pass: checking an answer against the context with a separate model.
 
-WHY NOT PLAIN faithfulness. Tested on our worst cases — it does not catch them:
+WHY NOT PLAIN faithfulness. Tested on our worst cases; it does not catch them:
   #7  the "ninety days" came from 労組法15条, which WAS in the context
   #43 the "ten days" came from 39条1項, which was there too
 Both statements follow from the context. This matches the measurements:
-0 fabricated citations out of 50, distortion in 3 of 20 — there is almost
+0 fabricated citations out of 50, distortion in 3 of 20: there is almost
 nothing here of the kind faithfulness catches.
 
 Hence three checks, two of which are useful:
-  適用 — is the cited article applicable to what was asked
+  適用: is the cited article applicable to what was asked
          (catches substituted institutions: 16 cases out of 30 in the ablation)
-  欠落 — was there a provision in the context that changes the answer, and was
+  欠落: was there a provision in the context that changes the answer, and was
          it left unused (catches #43, #22, #19, #31)
-  矛盾 — does what is said follow from the context (classic faithfulness)
+  矛盾: does what is said follow from the context (classic faithfulness)
 
 THE JUDGE IS FROM A DIFFERENT FAMILY than the generator. The same gemma would
 be blind in the same places as the generator, and we would be measuring a
 model's agreement with itself.
 
-The judge emits controlled tokens rather than prose — a technique
+The judge emits controlled tokens rather than prose: a technique
 that has already worked twice (the [N] marker, the 判定 verdict).
 
   uv run python src/verify.py --calibrate   # 20 questions against manual annotation
@@ -46,7 +46,7 @@ URL = "http://localhost:11434/api/chat"
 # rather than a constant edited between runs.
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "qwen3:8b")
 
-# ⚠️ No real articles appear in the format examples — an example in a prompt becomes a template.
+# No real articles appear in the format examples: an example in a prompt becomes a template.
 SYSTEM = """あなたは法令回答の検証者です。回答そのものは書きません。
 
 【入力】質問・提供された条文・回答・回答が引用した番号
@@ -81,7 +81,7 @@ def judge(question, chunks, answer, client=None):
     try:
         # The list of citations is passed explicitly. Without it the judge scored all
         # five context chunks, i.e. redid retrieval's work instead of checking the
-        # answer — hence 13 blocks out of 20 in the first calibration.
+        # answer: hence 13 blocks out of 20 in the first calibration.
         cited = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)
                         if 1 <= int(m) <= len(chunks)})
         cited_str = " ".join(f"[{i}]" for i in cited) or "なし"
@@ -122,13 +122,13 @@ def parse_verdict(text, n_chunks):
 
     missing, contra = filled("欠落"), filled("矛盾")
 
-    # The judge referenced [4] when there were three chunks — clean that here too.
+    # The judge referenced [4] when there were three chunks: clean that here too.
     if missing:
         idx = [int(m) for m in re.findall(r"\[(\d+)\]", missing)]
         if idx and not all(1 <= i <= n_chunks for i in idx):
             missing = ""
     # The contradiction slot must hold a STATEMENT, not an article name.
-    # The judge wrote 「労働者災害補償保険法 第十三条」 — the slot is filled,
+    # The judge wrote 「労働者災害補償保険法 第十三条」: the slot is filled,
     # the regex is satisfied, and there is no content.
     if contra and re.fullmatch(r"[^\u3002]{0,40}第[^\u3002]{1,12}条[^\u3002]{0,20}", contra):
         contra = ""
@@ -159,11 +159,11 @@ def run(rows, mode, client, r):
 def cmd_calibrate():
     """The judge against the manual annotation. Agreement per flag, separately.
 
-    ⚠️ The labels in manual_review.md were assigned by an agent (Claude), not
+    The labels in manual_review.md were assigned by an agent (Claude), not
     by a human. This is agreement between two models, not agreement with the
     truth. Written down explicitly so the two are not confused a month from now.
 
-    The annotation was made in dedupe mode — we judge the same answers in the
+    The annotation was made in dedupe mode: we judge the same answers in the
     same mode, or there is nothing to compare.
     """
     manual = parse_manual()
@@ -232,7 +232,7 @@ def cmd_full(mode=DEFAULT_MODE):
     print(f"→ {out}")
 
 
-# ────────────── structural completeness check ──────────────
+# --- structural completeness check ---
 # Four judges (8B ... 120B) failed 欠落: the best result was 3 of 4 with six
 # false positives, and quality does not grow with size. So this class has to
 # be caught structurally rather than by a model.
@@ -243,7 +243,7 @@ def cmd_full(mode=DEFAULT_MODE):
 #
 # No threshold -> nothing to fit on twenty data points.
 
-USED_MIN = 10   # characters of common substring — the paragraph counts as used
+USED_MIN = 10   # characters of common substring: the paragraph counts as used
 
 
 def _used(paragraph, answer):
@@ -259,9 +259,9 @@ def _used(paragraph, answer):
 def structural_omission(question, chunks, answer, rr):
     """Articles where the answer took one paragraph while a neighbour scores no lower.
 
-    ⚠️ This only makes sense in whole mode. In dedupe the context holds a
+    This only makes sense in whole mode. In dedupe the context holds a
     single paragraph, so flagging "did not take 2項" would mean the model was
-    never given it — the same mistake that was worked through on #22.
+    never given it: the same mistake that was worked through on #22.
     """
     arts = _by_article()
     cited = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)

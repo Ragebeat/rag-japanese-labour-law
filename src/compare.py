@@ -2,7 +2,7 @@
 
 A mean hides what broke. On 29.09 the quote prompt left over-refusal and
 refusal-on-miss unchanged, while #26 lost the key article (労契法 第十条) and
-#1 lost its only quote — both found by accident, reading answers. This lists
+#1 lost its only quote: both found by accident, reading answers. This lists
 them by question.
 
   uv run python src/compare.py                 # the last two runs in runs.jsonl
@@ -15,7 +15,7 @@ A before B: A is the old run, B the new one. "Regression" = worse in B.
 Quote fields are RE-CHECKED from the answers with the current check_quotes,
 not read from the reports. First run of this script compared a report
 scored by the old, buggy quote check (claim coverage 0.25) with one scored
-by the fixed check — two definitions of one metric side by side. Only the
+by the fixed check: two definitions of one metric side by side. Only the
 answers are comparable; the scoring is redone every time. Same caveat as
 rescore_quotes.py: context is rebuilt from the article list, so for articles
 over ARTICLE_CAP the check is slightly lenient.
@@ -178,7 +178,7 @@ def main():
     print(f"A: {describe(pa, ea)}")
     print(f"B: {describe(pb, eb)}")
     if ea and eb and ea["fingerprint"] == eb["fingerprint"]:
-        print("⚠ same configuration — every difference below is run-to-run variance")
+        print("WARNING: same configuration; every difference below is run-to-run variance")
     elif ea and eb:
         # The union of keys: the BGE-M3 runs predate the "embedder" key, and a key missing on one side is a change too
         changed = [k for k in sorted(ea["config"].keys() | eb["config"].keys())

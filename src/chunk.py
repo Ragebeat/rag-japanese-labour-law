@@ -40,7 +40,7 @@ PAIRS = [("（", "）"), ("「", "」"), ("(", ")"), ("『", "』")]
 
 
 def balanced(s):
-    """The 。 full stop occurs inside brackets — no splitting there."""
+    """The 。 full stop occurs inside brackets: no splitting there."""
     return all(s.count(o) == s.count(c) for o, c in PAIRS)
 
 

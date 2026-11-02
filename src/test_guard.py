@@ -2,7 +2,7 @@
 
 The guard is the one defence that held in the injection test (32 of 32),
 so it is tested like code, not like a model: fixed inputs, exact outputs.
-The streaming case matters most — a bug there means half a link has
+The streaming case matters most: a bug there means half a link has
 already reached the user's browser before anything is checked.
 
   uv run python src/test_guard.py

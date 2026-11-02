@@ -10,7 +10,7 @@ The decisions come from measurements, not from a tutorial:
    canonical orthography, not a dictionary form: する->為る, その->其の, 十->10.
    Those spellings appear neither in the statute nor in the query.
 
-3. We filter ON normalized_form — that way し / する / 為る are dropped by one
+3. We filter ON normalized_form: that way し / する / 為る are dropped by one
    rule while the surface form is what gets indexed.
 
 4. We do NOT discard 接尾辞: that is where 者 lives (労働者, 使用者), the key
@@ -57,7 +57,7 @@ def tokenize(text):
 
 
 def to_tsvector_text(text):
-    """Tokens joined by spaces — for Postgres to_tsvector('simple', ...)."""
+    """Tokens joined by spaces: for Postgres to_tsvector('simple', ...)."""
     return " ".join(tokenize(text))
 
 

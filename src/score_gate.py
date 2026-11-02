@@ -1,22 +1,22 @@
 """Do contexts with and without the source separate by reranker score?
 
 The idea: rather than begging a 4B model for a refusal through the prompt,
-move the decision outside it — onto a threshold on the cross-encoder's top-1
+move the decision outside it: onto a threshold on the cross-encoder's top-1
 score. Then refusal is deterministic and tuned by a single number.
 
 One reranking pass per question: the reranker scores the whole pool of 20 at
 once, and from it we get both the ordinary top-1 and the top-1 after the gold
 article is removed.
 
-⚠️ WHAT THIS NUMBER DOES NOT PROVE.
+WHAT THIS NUMBER DOES NOT PROVE.
 At r@1 = 0.60 the gold article often IS the top-1. Remove it and the score
 drops by construction, so the AUC on the ablation is inflated. The honest
 check is the six natural misses, where the article was never there to begin
 with. There are few of them, but they are not staged.
 
-⚠️ The threshold is not tuned for a pretty number. It is set by a product
-decision — how much over-refusal we are willing to accept (the 5th percentile
-of the group with a source) — and only then do we look at what came out.
+The threshold is not tuned for a pretty number. It is set by a product
+decision: how much over-refusal we are willing to accept (the 5th percentile
+of the group with a source), and only then do we look at what came out.
 
   uv run python src/score_gate.py
 """
@@ -35,7 +35,7 @@ OUT = ROOT / "data" / "score_gate.json"
 
 
 def auc(pos, neg):
-    """P(a random member of pos scores above a random member of neg). 0.5 — indistinguishable."""
+    """P(a random member of pos scores above a random member of neg). 0.5: indistinguishable."""
     if not pos or not neg:
         return float("nan")
     wins = sum((a > b) + 0.5 * (a == b) for a in pos for b in neg)

@@ -1,22 +1,22 @@
-"""A form for manual annotation of answers — the reference set for an LLM judge.
+"""A form for manual annotation of answers: the reference set for an LLM judge.
 
 Why: #31 (the right article was in the context, the model did not take it) is
 invisible to citation_validity, to the verdict and to the score gate. Cases
 like that are only caught by a human. Twenty annotated questions become the
-set on which an LLM judge is checked BEFORE it is trusted — otherwise the
+set on which an LLM judge is checked BEFORE it is trusted; otherwise the
 judge is as unverified an instrument as HNSW with its default ef_search.
 
 SAMPLING (the rule was written before generating):
-    from the questions that hit — a systematic sample of every second one by
+    from the questions that hit: a systematic sample of every second one by
     id, first 20. Not random and not "the interesting ones": the golden set is
     ordered by statute, so a step over ids preserves domain coverage, while
     picking "interesting" cases would fit the calibration set to known problems.
 
 THREE FLAGS, independent of one another:
-    substance  — does it answer the question: full / partial / none
-    distortion — does it distort the norm (wrong period, wrong amount, a duty
+    substance    does it answer the question: full / partial / none
+    distortion   does it distort the norm (wrong period, wrong amount, a duty
                  presented as a recommendation): yes / no
-    extra      — does it drag in unrelated material from junk chunks: yes / no
+    extra        does it drag in unrelated material from junk chunks: yes / no
 
 Why three rather than one score: an answer can be substantively right and
 still carry junk (#4, #5), or cite the article correctly and get the period
@@ -71,7 +71,7 @@ def main():
     picked = rows[::STEP][:N]
 
     if len(picked) < N:
-        print(f"⚠️ only {len(picked)} questions available at step {STEP}")
+        print(f"WARNING: only {len(picked)} questions available at step {STEP}")
 
     parts = [HEAD]
     for r in picked:

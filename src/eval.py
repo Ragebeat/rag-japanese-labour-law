@@ -1,8 +1,8 @@
 """Retrieval evaluation on the golden dataset.
 
-recall@k — the share of questions where AT LEAST ONE relevant article made
+recall@k: the share of questions where AT LEAST ONE relevant article made
 the top k. The user needs an answer, not an exhaustive digest, so one is
-enough. MRR — the mean of 1/position of the first hit.
+enough. MRR: the mean of 1/position of the first hit.
 
   python src/eval.py
 """

@@ -1,7 +1,7 @@
 """Generating an answer from the retrieved articles, with citations.
 
 The key decision: the model answers ONLY from the supplied chunks, and cites
-by an [N] marker — the chunk number we put into the context ourselves. If the
+by an [N] marker: the chunk number we put into the context ourselves. If the
 answer is not in the context, it must refuse.
 
 Why a marker rather than an article number: an article number has to be dug
@@ -52,7 +52,7 @@ DEFAULT_MODE = "whole"
 
 
 def report_path(mode, kind=""):
-    """Reports are named after the assembly mode — otherwise, a month later,
+    """Reports are named after the assembly mode; otherwise, a month later,
     there is no telling which configuration produced which numbers. The cost
     of that confusion is known: one whole series of runs was measured on dedupe and
     had to be re-measured.
@@ -65,7 +65,7 @@ TOP_K = 5
 
 REFUSAL = "該当する規定が見つかりません"
 
-# ⚠️ The format examples contain NO real articles or terms from the golden set.
+# The format examples contain NO real articles or terms from the golden set.
 # An example in the prompt becomes a template.
 #
 # The 「判定:」 line was added after the first run: in prose the model
@@ -109,25 +109,25 @@ SYSTEM_QUOTES = SYSTEM_BASE + """
 # prompt: claim coverage 0.09 -> 0.68, answers with numbers outside quotes
 # 22 -> 11, over-refusal 0 -> 0, refusal on retrieval miss 0.17 -> 0.17 (the
 # same five blind answers). One suspected regression: #26 dropped the key
-# article (労契法 第十条) — one case, not separable from run-to-run noise.
+# article (労契法 第十条): one case, not separable from run-to-run noise.
 # SYSTEM_BASE stays: the source-removal ablation is paired with a base-prompt report.
 SYSTEM = SYSTEM_QUOTES
 
-# Generation options — ONE copy, imported by api.py. The first num_ctx fix
+# Generation options: ONE copy, imported by api.py. The first num_ctx fix
 # patched generate() and missed api.py's two own requests: three
 # copies of the same dict, one of them updated.
 #
 # num_ctx is explicit on purpose. check_ctx.py: prompts run up to ~7 000
-# tokens and nothing was truncated — but only because the Ollama app on this
+# tokens and nothing was truncated, but only because the Ollama app on this
 # machine is set to 32k. That setting lives outside the repo; on a stock
 # install below 24 GiB VRAM the default is 4096, and longer prompts would
 # lose their start silently. Same value as agent.py: a different window
 # reloads the model on every switch between the two.
 GEN_OPTIONS = {"temperature": 0, "num_ctx": 32_768}
 
-# ── run registry ──
+# --- run registry ---
 # On 29.09 every --eval needed a manual Copy-Item first, or the new report
-# overwrote the one to compare against — and the comparison itself was done
+# overwrote the one to compare against, and the comparison itself was done
 # by reading two JSON files. Now each run is kept under a fingerprint of
 # everything that shapes the answer, and logged with its metrics.
 #
@@ -140,7 +140,7 @@ RUNS_LOG = ROOT / "data" / "runs.jsonl"
 
 
 def run_config(system, mode):
-    """Everything that shapes an answer, read from the modules themselves —
+    """Everything that shapes an answer, read from the modules themselves:
     not retyped here, or this would become a fourth copy that drifts.
     The expander model is in: switching it (qwen → gemma) moved reranker
     scores enough to break an earlier "finding"."""
@@ -167,7 +167,7 @@ def fingerprint(config):
 
 
 def git_state():
-    """Short commit, "+dirty" if src/ has uncommitted changes — then the
+    """Short commit, "+dirty" if src/ has uncommitted changes, then the
     commit alone does not reproduce the run."""
     try:
         run = lambda *a: subprocess.run(["git", *a], capture_output=True,  # noqa: E731
@@ -179,7 +179,7 @@ def git_state():
 
 
 def run_metrics(rows):
-    """One summary per run, the same definitions for every run — that is
+    """One summary per run, the same definitions for every run: that is
     what makes two runs comparable. Old reports without quote fields get
     None there, not zeros."""
     hit = [r for r in rows if r["hit"]]
@@ -216,7 +216,7 @@ def run_metrics(rows):
 
 def log_run(rows, system, mode, label):
     """Keep this run's report under its own name and append a line to
-    runs.jsonl. Two runs with the same fingerprint are a repeat — exactly
+    runs.jsonl. Two runs with the same fingerprint are a repeat, exactly
     what is needed to measure run-to-run noise."""
     config = run_config(system, mode)
     fp = fingerprint(config)
@@ -233,7 +233,7 @@ def log_run(rows, system, mode, label):
     return entry
 
 
-# ────────────────────────── article number parsing ──────────────────────────
+# --- article number parsing ---
 # The normalisation itself lives in jnum.py: expand_golden.py uses the same
 # parsing, and two copies are a reliable way to fix only one of them.
 #
@@ -301,13 +301,13 @@ def generate(query, chunks, client=None, system=SYSTEM, builder=None):
             client.close()
 
 
-# ───────────────────────────── answer analysis ──────────────────────────────
+# --- answer analysis ---
 
 def context_arts(chunks):
     """Two sets of articles occurring in the context.
 
-    source    — articles we actually supplied (article_title)
-    mentioned — plus everything named in chunk captions and bodies
+    source      articles we actually supplied (article_title)
+    mentioned   plus everything named in chunk captions and bodies
 
     The distinction is not formal. Japanese law is built on cross-references
     throughout (「法第二十五条第一項の…」, 「労働基準法第八十九条及び第九十条の
@@ -315,7 +315,7 @@ def context_arts(chunks):
     it is not a source either: the model never saw its text, so there is
     nothing to verify the content against.
 
-    The first run counted `source` only — and produced 6 false hallucinations
+    The first run counted `source` only, and produced 6 false hallucinations
     out of 6 found. The regex had been verified; the reference set had not.
     """
     source, extra = set(), set()
@@ -329,7 +329,7 @@ def context_arts(chunks):
 def inspect(answer, chunks):
     """Breaks the answer down into checkable facts. Averages nothing.
 
-    ⚠️ This is NOT faithfulness. It checks the source only: whether the model
+    This is NOT faithfulness. It checks the source only: whether the model
     cited what it was given. The case of "right number, wrong duration" is not
     caught here, and neither is "the right article was in the context but the
     model did not use it". Those need human annotation.
@@ -357,10 +357,10 @@ def inspect(answer, chunks):
     return {
         "verdict": verdict,
         "verdict_misplaced": misplaced,
-        # 回答不可 and nothing else — never seen once in the first run
+        # 回答不可 and nothing else: never seen once in the first run
         "clean_refusal": verdict == "no" and not marks and not cited,
         "partial_refusal": verdict == "no" and bool(marks or cited),
-        # said "I can answer" and hedged in the same breath — over-hedging
+        # said "I can answer" and hedged in the same breath: over-hedging
         "hedged": any(h in body for h in HEDGE),
         "marks": sorted(marks),
         "bad_marks": sorted(bad_marks),
@@ -376,7 +376,7 @@ def inspect(answer, chunks):
     }
 
 
-# ── verbatim quote check ──
+# --- verbatim quote check ---
 # Minimum 4 characters: a shorter 「」 is a term the answer brackets for
 # emphasis (「労働者」), not a quote.
 # ANY_QUOTE_RE only cuts quotes out when looking for numbers. Quotes
@@ -467,7 +467,7 @@ def _quotes(s):
 
 def _covered(content, sources):
     """How many characters of content lie in runs of MIN_RUN+ characters
-    copied verbatim from any of the sources — brackets or not.
+    copied verbatim from any of the sources: brackets or not.
 
     Why: after the paragraph rule the model kept copying statute text word
     for word but dropped the 「」 (#42, #50: whole article sentences, even the
@@ -488,12 +488,12 @@ def check_quotes(body, chunks):
     model saw that chunk.
 
     First version demanded 「…」[N] back to back and missed 71 of 102
-    quotes: the model writes natural Japanese — 「…」を支払わなければ
-    なりません[1] — quote mid-sentence, marker at the end.
+    quotes: the model writes natural Japanese, with the quote mid-sentence and
+    the marker at the end: 「…」を支払わなければなりません[1].
 
     Checked against the sentence's own [N] chunks, not the whole context:
     otherwise text of one article quoted under another's number would pass
-    (a real case from earlier runs). found_in says where the text really is — non-empty
+    (a real case from earlier runs). found_in says where the text really is: non-empty
     means "real text, wrong number", empty means "not a real quote".
     """
     texts = [_norm(c["text"].split("\n", 1)[-1]) for c in chunks]
@@ -514,7 +514,7 @@ def check_quotes(body, chunks):
 
     # Two coverages, because verbatim-ness alone rewards NOT quoting. The
     # first test answer quoted the undisputed sentence and paraphrased the
-    # exceptions — the splice described above, again, outside the quotes — while
+    # exceptions (the splice described above, again, outside the quotes) while
     # reporting "0 non-verbatim". And sentence coverage alone rewards a
     # token quote: 「妊娠したこと」 in brackets, the claim itself paraphrased.
     # So: claims_quoted (sentences with a verbatim quote) AND quoted_chars
@@ -525,7 +525,7 @@ def check_quotes(body, chunks):
     for s in _sentences(body):
         src = [int(x) for x in MARK_RE.findall(s) if 1 <= int(x) <= len(texts)]
         # The paragraph the sentence names. Checkable only when the sentence
-        # cites exactly one article and that article has a paragraph map —
+        # cites exactly one article and that article has a paragraph map:
         # with two articles cited, 第N項 could belong to either.
         one = src[0] if len(set(src)) == 1 else None
         pm = pmaps[one - 1] if one else None
@@ -544,7 +544,7 @@ def check_quotes(body, chunks):
                 ok_chars += len(_norm(q))
                 if refs:
                     # A quote spanning two paragraphs sits in none of them
-                    # alone — then there is nothing to compare, not an error.
+                    # alone, then there is nothing to compare, not an error.
                     inside = [k for k, t in pm.items() if _verbatim(q, t)]
                     if inside and not set(inside) & refs:
                         para_bad.append({"quote": q, "n": one,
@@ -571,10 +571,10 @@ def check_quotes(body, chunks):
             "verbatim_chars": verbatim_chars, "content_chars": content_chars}
 
 
-# ──────────────────────────────────── cli ────────────────────────────────────
+# --- cli ---
 
 # Ruri, no query expansion. sweep.py --ruri, r@5 on golden:
-# with expansion 0.96, without 0.94 — one question net (+2 −1), noise.
+# with expansion 0.96, without 0.94: one question net (+2 −1), noise.
 # Expansion was dropped because the dictionary was written against golden's
 # own misses (its gain there is optimistic), and it costs an LLM call per
 # query. 0.94 is the one number with nothing fitted to golden.
@@ -588,13 +588,13 @@ def dedupe_by_article(chunks, k):
     """One chunk per article: keep the best paragraph, drop the rest.
 
     The list is already sorted by the reranker, so the first occurrence is the
-    best one — remembering what has been seen is enough.
+    best one: remembering what has been seen is enough.
 
     The key is (law_id, article_title), not the title alone: 第五条 exists in
     almost every statute in the corpus, so one number would collapse different
     articles together.
 
-    ⚠️ This changes retrieval, not just presentation. More DISTINCT articles
+    This changes retrieval, not just presentation. More DISTINCT articles
     reach the top k, so recall@k and MRR shift. Measure both configurations.
     """
     seen, out = set(), []
@@ -631,10 +631,10 @@ def whole_article(c, arts):
     Why: dedupe keeps the paragraph the reranker rates best, but the answer to
     the question may sit in a neighbouring paragraph of the same article. On
     #22 the reranker picked 13条 1項 (twelve months), while for most people
-    asking, 2項 (six months) is the correct one — the model never saw it and
+    asking, 2項 (six months) is the correct one: the model never saw it and
     could not have used it.
 
-    ⚠️ Level 3 of the chunker splits with overlap, so adjacent pieces partly
+    Level 3 of the chunker splits with overlap, so adjacent pieces partly
     repeat. Exact duplicates are dropped, partial ones remain. That is 1.6% of
     the corpus, but if it ever surfaces in answers, fix it here.
     """
@@ -645,7 +645,7 @@ def whole_article(c, arts):
     # Paragraph labels. The chunk header carries 「第N項」, but
     # only the body went into the context: the model never saw paragraph
     # numbers and had to count paragraphs itself (an earlier run put 時季変更権
-    # under 第3項 — it is 第5項). Labels also give check_quotes a map to
+    # under 第3項: it is 第5項). Labels also give check_quotes a map to
     # verify that a quote sits in the paragraph the answer names.
     labelled = len({p.get("paragraph_num") for p in parts}) > 1
     seen, bodies, paras, prev = set(), [], {}, None
@@ -673,15 +673,15 @@ def whole_article(c, arts):
 def retrieve(r, query, mode="dedupe", k=TOP_K, exclude=None):
     """Context assembly. Three modes:
 
-    raw    — top-k paragraphs as they come (baseline; duplicates eat slots)
-    dedupe — one best paragraph per article (loses neighbouring paragraphs)
-    whole  — k distinct articles, each in full
+    raw      top-k paragraphs as they come (baseline; duplicates eat slots)
+    dedupe   one best paragraph per article (loses neighbouring paragraphs)
+    whole    k distinct articles, each in full
 
     The reranker always gets pool = k * POOL_MULT and we take the same number:
     it scores the entire pool regardless, so collapsing and filtering are free
     in time terms.
 
-    exclude — a set of (law_id, article_title) removed from the pool before
+    exclude: a set of (law_id, article_title) removed from the pool before
     the top-k selection. Needed for the ablation.
     """
     pool = k * POOL_MULT
@@ -729,26 +729,26 @@ def cmd_sample(n=5, mode=DEFAULT_MODE, quotes=True):
             if info["transitive"]:
                 print(f"  ↳ transitive references: {info['transitive']}")
             if info["bad_marks"]:
-                print(f"  ❌ marker out of range: {info['bad_marks']}")
+                print(f"  FAIL marker out of range: {info['bad_marks']}")
             if info["bad_arts"]:
-                print(f"  ❌ article not in the context: {info['bad_arts']}")
+                print(f"  FAIL article not in the context: {info['bad_arts']}")
             if info["partial_refusal"]:
-                print("  ⚠ incomplete refusal: 回答不可, yet citations present")
+                print("  WARNING: incomplete refusal: 回答不可, yet citations present")
             if info["hedged"] and info["verdict"] == "ok":
-                print("  ⚠ hedged: 回答可能, but the text hedges")
+                print("  WARNING: hedged: 回答可能, but the text hedges")
             print_quotes(info)
             print()
 
 
-# ── output guard: links ──
+# --- output guard: links ---
 # The injection test: a poisoned document made the model append the
-# attacker's link 4-8 times out of 8 under every prompt defence — and one
+# attacker's link 4-8 times out of 8 under every prompt defence, and one
 # sentence of stronger wording beat delimiting and escaping, 8/8. Only a
 # code check on the output held, 32 of 32. A prompt lowers the odds; an
 # allow-list on what leaves the system removes them for this class.
 #
 # An ALLOW-list, not "is the link in the sources": a poisoned source
-# contains it. Bare domains and e-mail addresses count too — an attacker
+# contains it. Bare domains and e-mail addresses count too: an attacker
 # does not need the https://.
 ALLOWED_DOMAINS = ("e-gov.go.jp", "mhlw.go.jp")
 DOMAIN_RE = re.compile(r"(?:https?://|[A-Za-z0-9._%+-]+@)?((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})"
@@ -813,11 +813,11 @@ def print_quotes(info):
     for b in info["quote_bad"]:
         real = (f" → the text is actually in [{','.join(map(str, b['found_in']))}]"
                 if b["found_in"] else " → in no article")
-        print(f"  ❌ [{','.join(map(str, b['n']))}]「{b['quote'][:50]}」{real}")
+        print(f"  FAIL [{','.join(map(str, b['n']))}]「{b['quote'][:50]}」{real}")
     if info["num_unquoted"]:
-        print(f"  ⚠ numbers outside quotes: {info['num_unquoted']}")
+        print(f"  WARNING: numbers outside quotes: {info['num_unquoted']}")
     for b in info.get("para_bad", []):
-        print(f"  ❌ [{b['n']}] cites 第{','.join(map(str, b['cited']))}項, "
+        print(f"  FAIL [{b['n']}] cites 第{','.join(map(str, b['cited']))}項, "
               f"but the quote is in 第{','.join(map(str, b['found']))}項  「{b['quote'][:40]}」")
 
 
@@ -852,7 +852,7 @@ def quote_summary(rows):
     print(f"  not from its own [N]: {len(bads)}  (text found under another number: {len(moved)})")
     print(f"  quotes in sentences without [N]: {sum(len(r_['quote_loose']) for r_ in answered)}")
     print(f"  answers with a number outside quotes: {sum(1 for r_ in answered if r_['num_unquoted'])}")
-    # ── paragraphs: does the quote sit in the 項 the answer names ──
+    # --- paragraphs: does the quote sit in the 項 the answer names ---
     npc = sum(r_.get("para_claims", 0) for r_ in answered)
     pbad = [(r_, b) for r_ in answered for b in r_.get("para_bad", [])]
     print(f"  claims naming a 項: {npc}; quote not in the named 項: {len(pbad)}")
@@ -898,7 +898,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
                          **info})
             flag = {"no": " NO", "ok": "   ", None: " ? "}[info["verdict"]]
             if info["bad_arts"] or info["bad_marks"]:
-                flag = flag[:2] + "❌"
+                flag = flag[:2] + "✗"
             print(f"{i:>2}/{len(golden)} {'hit ' if hit else 'MISS'} {flag} {g['q'][:26]}")
 
     n = len(rows)
@@ -925,7 +925,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
 
     quote_summary(rows)
 
-    # ─── retrieval versus generation (§4.5) ───
+    # --- retrieval versus generation (§4.5) ---
     # The overall refusal rate says nothing: refusing when search missed is
     # correct behaviour, refusing when it hit is a loss. Two error rates,
     # not one, and they must be optimised in opposite directions.
@@ -951,7 +951,7 @@ def cmd_eval(mode=DEFAULT_MODE, quotes=True):
             print(f"  {label}: " + ", ".join(f"#{r_['id']}" for r_ in group))
 
     # A separate report: the quote prompt changes generation, and the baseline
-    # gen_report_whole.json must stay — the ablation is paired against it.
+    # gen_report_whole.json must stay: the ablation is paired against it.
     out = report_path(mode, "_quotes" if quotes else "")
     out.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"→ {out}  (latest run of this prompt — other scripts read it)")

@@ -1,6 +1,6 @@
 """Deterministic checks for the verbatim-quote check in generate.py.
 
-A checker that is itself wrong makes every number it reports worthless — and
+A checker that is itself wrong makes every number it reports worthless, and
 the first run of context_arts() produced 6 false hallucinations out
 of 6 for exactly that reason. So the checker is tested on hand-made answers
 before it is trusted on model output.
@@ -69,7 +69,7 @@ def run():
     r.append(check("a short 「」 is a term, not a quote", (q["quotes"], q["quote_loose"]), (0, [])))
 
     # The first real answer with the quote prompt: the undisputed sentence
-    # quoted, the exceptions paraphrased — the splice repeated outside quotes.
+    # quoted, the exceptions paraphrased: the splice repeated outside quotes.
     # Verbatim-ness says 1/1; coverage must say 1/3.
     q = check_quotes(
         "賃金は、原則として「通貨で、直接労働者に、その全額を支払わなければならない」[1] "
@@ -81,7 +81,7 @@ def run():
                    (q["quotes"] - len(q["quote_bad"]), q["claims_quoted"], q["claims"]),
                    (1, 1, 3)))
 
-    # A real case from earlier runs: 時季変更権 put under 第3項 — it is in 第5項. A shortened
+    # A real case from earlier runs: 時季変更権 put under 第3項; it is in 第5項. A shortened
     # stand-in for 第39条 with paragraph labels, as whole_article() builds it.
     a39 = {"text": "労働基準法 第三十九条\n"
                    "（第3項）次に掲げる労働者の有給休暇の日数については、比例して付与する。\n"

@@ -4,15 +4,15 @@ The dictionary lives in `data/synonyms.json` and is extended without touching
 the code.
 
 The diagnosis: hybrid search failed because of a terminology
-gap — パワハラ and 育休 are ABSENT from the statutory text entirely.
+gap: パワハラ and 育休 are ABSENT from the statutory text entirely.
 
-⚠️ The dictionary was written FROM DOMAIN KNOWLEDGE, not from the list of
+The dictionary was written FROM DOMAIN KNOWLEDGE, not from the list of
 failed golden questions. Otherwise it would be writing the answers into the
 dictionary rather than improving search.
 
-⚠️ Its main limitation: it covers only what was anticipated. On an unfamiliar
+Its main limitation: it covers only what was anticipated. On an unfamiliar
 term it stays silent. Hence the pairing with an LLM fallback (see
-query_llm.py) — the dictionary for the frequent cases, the model for the rest.
+query_llm.py): the dictionary for the frequent cases, the model for the rest.
 
   python src/query_expand.py "育休っていつまで？"
 """
@@ -43,7 +43,7 @@ def expand(query, narrow=False):
     Replacing would be risky: if the dictionary is wrong, the original meaning
     is lost. Adding only widens coverage.
 
-    narrow=True — only the first term of each list. The measurements show that
+    narrow=True, only the first term of each list. The measurements show that
     a long tail dilutes: 労災 -> 業務災害 通勤災害 補償 pulls towards articles
     about 通勤 when the question was about 休業補償.
     """

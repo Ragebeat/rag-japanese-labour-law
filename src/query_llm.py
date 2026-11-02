@@ -1,22 +1,22 @@
-"""Query expansion with a local LLM — an alternative to the dictionary.
+"""Query expansion with a local LLM: an alternative to the dictionary.
 
 The hypothesis is not "an LLM beats a dictionary" but the narrower one: **an
 LLM will find substitutions where the dictionary is silent**. Example:
-1日何時間まで働かせていいの？ — not a single colloquial term, so the dictionary
+1日何時間まで働かせていいの？, not a single colloquial term, so the dictionary
 does not fire.
 
 Decisions carried over from earlier structured-output work:
 - instructions and examples in system, the user question in user
 - structured output via format=json
-- **the schema allows an EMPTY list** — otherwise the model invents terms
+- **the schema allows an EMPTY list**; otherwise the model invents terms
   where there are none (a known failure: a schema with no field for
   "nothing found" produces fabrication instead of "I do not know")
 
 Cached to disk: 50 questions times several runs, and Ollama swaps models on
 top of that (the embedder and the generator do not fit in 6 GB together).
 
-  python src/query_llm.py            — run over the test questions
-  python src/query_llm.py --warm     — warm the cache over the whole golden set
+  python src/query_llm.py              run over the test questions
+  python src/query_llm.py --warm       warm the cache over the whole golden set
 """
 
 import hashlib
@@ -51,7 +51,7 @@ MAX_TERMS = 4
 #    -> numbers and periods are now forbidden explicitly
 #
 # 3. Everyday vocabulary: 不当解雇, 性的ハラスメント, 平等の原則,
-#    正規の雇用形態 — none of these appear in the statutory text.
+#    正規の雇用形態: none of these appear in the statutory text.
 #    -> the rule is reinforced with examples of BAD terms
 
 SYSTEM = """日本の労働法令の検索用に、口語の質問から法令用語を抽出してください。
@@ -83,7 +83,7 @@ SYSTEM = """日本の労働法令の検索用に、口語の質問から法令�
 SCHEMA = {
     "type": "object",
     "properties": {
-        # AN EMPTY LIST IS ALLOWED — minItems is deliberately omitted
+        # AN EMPTY LIST IS ALLOWED: minItems is deliberately omitted
         "terms": {"type": "array", "items": {"type": "string"},
                   "maxItems": MAX_TERMS},
     },
@@ -94,7 +94,7 @@ _cache = None
 
 
 # Simplified Chinese characters that do not exist in Japanese.
-# qwen3.5 produced 最低工资 and 劳动基准法 — tokens like that will never
+# qwen3.5 produced 最低工资 and 劳动基准法: tokens like that will never
 # be found in a Japanese corpus. The prompt does not always hold, so a
 # post-filter is needed. The list is incomplete but covers the frequent cases.
 SIMPLIFIED = set("资动劳务单岁权应长时间关术员类问题说语边达过还进运远连这那们个为从优产价业乐习书买卖发号只叶团国园图坚报择挣据无旧显机权条来构标样权级经络统编考计记论证该请质走车转边适选都销际预领频题")
@@ -118,7 +118,7 @@ def _save_cache():
 
 
 def _key(q):
-    """The key includes THE PROMPT ITSELF — otherwise, after editing it,
+    """The key includes THE PROMPT ITSELF; otherwise, after editing it,
     stale answers would be pulled in and the measurement would show nothing."""
     h = hashlib.sha1(f"{MODEL}|{SYSTEM}|{q}".encode()).hexdigest()
     return h[:16]
@@ -130,7 +130,7 @@ def llm_terms(query, client=None):
     k = _key(query)
     if k in cache:
         # A span even for a cache hit: a trace must show whether the model was
-        # called at all — "13 s on expansion" and "0 ms, cached" look the same
+        # called at all: "13 s on expansion" and "0 ms, cached" look the same
         # from outside.
         with tracing.span("expand.llm", "LLM", input=query,
                           attrs={"expand.cache_hit": True, "llm.model_name": MODEL}) as sp:
@@ -149,7 +149,7 @@ def llm_terms(query, client=None):
             "format": SCHEMA,
             "stream": False,
             "think": False,
-            # ⚠️ No num_ctx here, unlike GEN_OPTIONS — a fourth copy of the
+            # No num_ctx here, unlike GEN_OPTIONS: a fourth copy of the
             # options. Harmless while the Ollama app window equals 32768; if not,
             # the model reloads between expansion and generation. ollama.load_ms
             # on the next span says which.
@@ -164,7 +164,7 @@ def llm_terms(query, client=None):
             tracing.llm_response(sp, resp)
         raw = resp["message"]["content"]
         terms = json.loads(raw).get("terms", [])
-        # post-filter: drop terms containing digits and overly long ones —
+        # post-filter: drop terms containing digits and overly long ones:
         # the model ignores the instruction in roughly a third of cases
         clean = []
         for t in terms:
@@ -192,7 +192,7 @@ def llm_terms(query, client=None):
 
 
 def expand_llm(query, client=None):
-    """Adds terms TO the query — the same mechanism as the dictionary."""
+    """Adds terms TO the query: the same mechanism as the dictionary."""
     terms = llm_terms(query, client)
     if not terms:
         return query, []
@@ -208,7 +208,7 @@ def expand_combo(query, client=None, narrow=True):
 
     Measurement put them level (0.78 against 0.76, a difference of one
     question), but the golden set consists of questions from the same domain
-    the dictionary was written for — on unfamiliar phrasings it simply stays
+    the dictionary was written for: on unfamiliar phrasings it simply stays
     silent.
     """
     _, dict_terms = expand(query, narrow=narrow)

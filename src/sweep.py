@@ -1,6 +1,6 @@
 """Sweeping hybrid search configurations over the golden dataset.
 
-⚠️ The golden set is only 50 questions. Turning knobs until the number looks
+The golden set is only 50 questions. Turning knobs until the number looks
 good is fitting to those 50, not improving search. So this file holds FIVE
 meaningful variants rather than a grid. A difference below 0.02 is noise,
 not an improvement.
@@ -39,7 +39,7 @@ CONFIGS = [
      "40 candidates instead of 20"),
     # The trace showed the reranker takes ~88% of retrieval (about
     # 0.4-0.6 s per pair on the CPU). The first sweep only tried a LARGER pool; the
-    # cheap lever is a smaller one — if recall holds.
+    # cheap lever is a smaller one: if recall holds.
     ("+rerank exp pool15", dict(**BEST, rerank=True, rerank_on="expanded",
                                 pool=15),
      "15 candidates — reranking a quarter cheaper"),
@@ -53,12 +53,12 @@ CONFIGS = [
 POOL_SET = ("+rerank exp", "+rerank exp pool15", "+rerank exp pool10")
 OUT_POOL = ROOT / "data" / "sweep_pool.json"
 
-# --ruri: level 2 of the embedding comparison — Ruri in the full
+# --ruri: level 2 of the embedding comparison; Ruri in the full
 # pipeline. The expansion dictionary was written against BGE-M3's misses, so
 # the question is not only "how high" but "is expansion still worth an LLM
 # call": compare "ruri +rerank orig" (no expansion anywhere) with
 # "ruri +rerank exp" (the working configuration). BGE-M3's working
-# configuration runs alongside as the reference — same session, same Ollama.
+# configuration runs alongside as the reference: same session, same Ollama.
 RURI = "ruri-v3-310m"
 RURI_CONFIGS = [
     ("bge +rerank exp", dict(**BEST, rerank=True, rerank_on="expanded"),
@@ -94,7 +94,7 @@ def run(h, rr, golden, kw):
             res = h.search(g["q"], k=10, core_only=True, **kw)
         rows.append({"id": g["id"], "q": g["q"],
                      "pos": first_hit(res, g["relevant"])})
-        # A reranked config takes ~10 minutes with no output otherwise —
+        # A reranked config takes ~10 minutes with no output otherwise:
         # indistinguishable from a hang.
         print(f"  {j}/{len(golden)}  {time.time() - t0:.0f}s", end="\r",
               file=sys.stderr, flush=True)
@@ -145,7 +145,7 @@ def main():
     print(f"\nbest: {best[0]} — recall@5 = "
           f"{best[1]['metrics']['recall@5']:.3f}")
     if best[1]["metrics"]["recall@5"] - BASELINE < 0.02:
-        print("⚠️ the gain is below 0.02 — within the noise on 50 questions")
+        print("WARNING: the gain is below 0.02; within the noise on 50 questions")
 
     # what exactly the query expansion fixed
     def ok(p):

@@ -3,7 +3,7 @@
 ReAct (Reasoning + Acting): the model alternates thinking and calling a tool,
 and decides by itself how many steps it needs.
 
-Where the line between code and model runs — one rule:
+Where the line between code and model runs; one rule:
 whatever can be written as a rule is code. The model keeps only the semantic
 rewording of the query.
 
@@ -46,12 +46,12 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 GATE = ROOT / "data" / "score_gate.json"
 
 
-# ─────────────────────────────── the threshold ───────────────────────────────
+# --- the threshold ---
 
 def measured_threshold():
     """The same product decision as in score_gate.py: the 5th percentile of
     top-1 scores in the group WITH a source. Read from the measurement, not
-    typed in — the 0.5 / 0.1 of the first tool description were by eye.
+    typed in: the 0.5 / 0.1 of the first tool description were by eye.
     """
     rows = json.loads(GATE.read_text(encoding="utf-8"))
     pos = [r["top1_full"] for r in rows if r["hit"]]
@@ -60,12 +60,12 @@ def measured_threshold():
 
 THRESHOLD = measured_threshold()
 
-# ──────────────────────────────── the limits ─────────────────────────────────
+# --- the limits ---
 # Each one catches a failure the others cannot.
 
 MAX_ITER = 8           # a fuse against infinity, not a budget
 TOKEN_CAP = 60_000     # cumulative across every model call, history included
-NUM_CTX = 32_768       # the window we ask Ollama for; see the ⚠️ in chat()
+NUM_CTX = 32_768       # the window we ask Ollama for; see the note in chat()
 ANSWER_MAX = 800       # num_predict on every call
 WALL_CAP = 240.0       # seconds, the user's patience
 FINAL_TIME = 60.0      # held back for the final turn
@@ -79,7 +79,7 @@ NEW_SHARE = 0.4        # at least 2 of 5 articles must be new to count as progre
 STALL_MAX = 2          # consecutive calls without progress = spinning
 
 
-# ──────────────────────────────── the tool ───────────────────────────────────
+# --- the tool ---
 
 TOOL_NAME = "labor_laws_rag"
 
@@ -132,7 +132,7 @@ def _top(hits):
 
 
 def _expansion(query):
-    """Who rewrote the query and into what — for the trace only.
+    """Who rewrote the query and into what: for the trace only.
 
     combo is an EXCLUSIVE fallback: the LLM runs only when the dictionary
     returns nothing. A partial dictionary hit therefore switches the LLM off.
@@ -149,21 +149,21 @@ def _expansion(query):
 class Tool:
     """The RAG wrapped as a tool. Returns (payload for the model, keys, top).
 
-    keys and top are for the loop detector — the model never sees them as such.
+    keys and top are for the loop detector: the model never sees them as such.
     """
 
     def __init__(self):
         self.rr = Reranked()
         self.arts = _by_article()
         # One worker: a timed-out search keeps running in its thread. In the
-        # agent loop that was harmless — a timeout stops the loop. Under MCP
+        # agent loop that was harmless: a timeout stops the loop. Under MCP
         # there is no loop of ours: the client may simply call again, queue
         # behind the zombie search and time out too. So the guard lives here,
         # in the tool, where it travels with it: see _busy in _one().
         self.pool = cf.ThreadPoolExecutor(max_workers=1)
         self._busy = None
         # Warm-up. The reranker and the embedder load lazily on the first
-        # search — longer than TOOL_TIMEOUT on a cold start. The first run
+        # search: longer than TOOL_TIMEOUT on a cold start. The first run
         # died on exactly that: a cold start reported as a search failure.
         # api.py warms up in lifespan for the same reason.
         self._search("有給休暇", 1, core_only=True)
@@ -198,7 +198,7 @@ class Tool:
                 "out and has not finished). Try again in a minute.")},
                     set(), None, None)
         # carry(): the search runs in a worker thread, and the trace context
-        # does not follow it there by itself — without this every search
+        # does not follow it there by itself: without this every search
         # would be a separate orphan trace instead of a child of this call.
         fut = self.pool.submit(tracing.carry(self._run), query, k)
         self._busy = fut
@@ -230,7 +230,7 @@ class Tool:
             }, keys, top, exp
 
         # weak: candidates WITHOUT text. Not an instruction "do not answer from
-        # them" — the absence of material to answer from.
+        # them": the absence of material to answer from.
         return {
             "query": query,
             "status": "weak",
@@ -252,7 +252,7 @@ class Tool:
             return payload, keys, tops, exps
 
     def _call(self, queries, k=5):
-        """-> ({"results": [...]}, union of keys, tops, expansions — the last
+        """-> ({"results": [...]}, union of keys, tops, expansions; the last
         two aligned with results; neither is shown to the model)."""
         try:
             k = max(1, min(int(k or 5), 10))
@@ -289,12 +289,12 @@ def _error(message):
     return {"status": "error", "message": message, "next": []}
 
 
-# ──────────────────────────── the loop detector ──────────────────────────────
+# --- the loop detector ---
 
 class Progress:
     """Looks at what came back, not at what was asked.
 
-    Query texts always differ a little — the model reshuffles words — so a
+    Query texts always differ a little (the model reshuffles words) so a
     detector on queries either never fires or cuts off a legitimate
     refinement. The set of (law_id, article) does not lie.
 
@@ -314,14 +314,14 @@ class Progress:
         return self.stalls
 
 
-# ──────────────────────────────── the budget ─────────────────────────────────
+# --- the budget ---
 
 class Budget:
     """Stops BEFORE a call that could not be followed by the final turn.
 
     Next prompt ≈ last prompt + the largest growth seen so far (a tool result
     with whole articles is the biggest step). The check requires room for one
-    more ordinary step AND the final turn after it — otherwise stop now,
+    more ordinary step AND the final turn after it; otherwise stop now,
     while the final answer still fits.
     """
 
@@ -361,7 +361,7 @@ class Budget:
         return None
 
 
-# ──────────────────────────────── the model ──────────────────────────────────
+# --- the model ---
 
 SYSTEM = """あなたは日本の労働法令について答えるアシスタントです。
 
@@ -376,7 +376,7 @@ NUDGE = "まず labor_laws_rag で検索してから答えてください。"
 
 # The code decides THAT a second attempt happens; the model decides WHAT to
 # search. On the tax question the model skipped the reframing suggested in
-# `next` and refused — while 労基法 第24条 was in the corpus all along.
+# `next` and refused, while 労基法 第24条 was in the corpus all along.
 # No example concept here: an example in a prompt becomes a template.
 REFRAME = """次の論点は該当する条文が見つかりませんでした: {qs}
 質問の背景にある別の法的概念で言い換え、一度だけ再検索してください。
@@ -398,8 +398,8 @@ FINAL_DEFAULT = "【検索終了: 予算上限】これ以上は検索できま�
 
 
 def chat(http, messages, tools=True):
-    # ⚠️ num_ctx is set explicitly. Ollama's default window is small, and a
-    # prompt that does not fit is trimmed SILENTLY — no error, the model just
+    # num_ctx is set explicitly. Ollama's default window is small, and a
+    # prompt that does not fit is trimmed SILENTLY: no error, the model just
     # never sees the start of the history. With whole articles piling up in
     # the history that would happen within two or three steps.
     body = {"model": MODEL, "messages": messages, "stream": False, "think": False,
@@ -423,7 +423,7 @@ def fallback(reason, found):
             f"検索で見つかった条文:\n{arts}")
 
 
-# ──────────────────────────────── the loop ───────────────────────────────────
+# --- the loop ---
 
 def run(question, tool, trace=False):
     """One question = one trace: the AGENT span is the root, every model
@@ -533,7 +533,7 @@ def _run(question, tool, trace=False):
                              "content": REFRAME.format(qs="、".join(weak_qs))})
                 log("↻ weak — nudge to rephrase")
 
-        # ── the final turn: exhausting a budget is a last move, not an exception
+        # The final turn: exhausting a budget is a last move, not an exception.
         log(f"■ stop: {stop} → final turn")
         if stop == "llm_error":
             return _result(fallback(stop, found), stop, budget, found)
@@ -552,7 +552,7 @@ def _run(question, tool, trace=False):
 
 def _result(answer, stop, budget, found, ungrounded=False):
     # The output guard, same allow-list as generate.py and api.py. Every
-    # final answer — the model's, the final turn's, the fallback — passes
+    # final answer (the model's, the final turn's, the fallback) passes
     # through here, so this is the one place to put it.
     answer, blocked = guard_links(answer)
     return {"answer": answer, "blocked_links": blocked,
@@ -579,7 +579,7 @@ def main():
     print(f"stop: {res['stop']}  iterations: {res['iterations']}  "
           f"tokens: {res['tokens']}  time: {res['seconds']}s")
     if res["ungrounded"]:
-        print("⚠ answered without a single search")
+        print("WARNING: answered without a single search")
     for law, art in res["found"]:
         print(f"  • {law} {art}")
 
@@ -591,7 +591,7 @@ def main():
     if len(p) < 2:
         print(f"prompt_eval_count: {p} — fewer than two tool calls, the check says nothing")
     elif any(b < a for a, b in pairwise(p)):
-        print(f"⚠ prompt_eval_count is not monotonic: {p} — the token budget is wrong")
+        print(f"WARNING: prompt_eval_count is not monotonic: {p}; the token budget is wrong")
     else:
         print(f"prompt_eval_count is monotonic: {p}")
 

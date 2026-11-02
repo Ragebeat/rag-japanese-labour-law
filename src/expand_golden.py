@@ -1,25 +1,25 @@
-"""Expanding the golden set under rule A — a proposal, not an application.
+"""Expanding the golden set under rule A: a proposal, not an application.
 
 RULE A (written down BEFORE looking at the result, applied to all 50):
     an article of a 施行規則 / 施行令 counts alongside the statutory article
     in `relevant` if it explicitly references it as 「法第N条…」.
 
-REFINEMENT after the first run (193 articles across 35 questions — dilution):
+REFINEMENT after the first run (193 articles across 35 questions; dilution):
     only if the ordinance article references no more than MAX_PARENTS
     parent articles.
 
 Why: 第六条の二 (selecting the majority representative) references 法第18条,
-第24条, 第32条の2, 第39条 and more at once — and landed in five different
+第24条, 第32条の2, 第39条 and more at once, and landed in five different
 questions. That is procedural plumbing, not the implementation of a norm.
 Referencing one article means implementing it; referencing eight means it is
 a general mechanism.
 
-⚠️ The "caption versus body" axis turned out to be the wrong one: 第六条の二
+The "caption versus body" axis turned out to be the wrong one: 第六条の二
 lists its parent articles right in the caption and passes the strict mode too.
 
-⚠️ The script OVERWRITES NOTHING. It writes golden_proposed.jsonl and
+The script OVERWRITES NOTHING. It writes golden_proposed.jsonl and
 golden_review.md alongside. Every candidate has to be reviewed by eye: the
-rule sets the search boundary, it does not replace judgement on the merits —
+rule sets the search boundary, it does not replace judgement on the merits:
 just as the formal rule for selecting the core corpus needed manual exceptions.
 
   uv run python src/expand_golden.py              # MAX_PARENTS=1

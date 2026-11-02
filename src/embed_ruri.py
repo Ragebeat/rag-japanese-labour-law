@@ -13,7 +13,7 @@ If embed_compare.py has already encoded the core 7 452 chunks with the same
 model, revision and document prefix, they are reused, not recomputed; otherwise
 they are encoded here into the same cache. Then the remaining ~12 700.
 
-⚠️ db_init.py `schema` drops the table, and this column with it. After a
+db_init.py `schema` drops the table, and this column with it. After a
 full rebuild run `load` here again (the vectors stay cached in data/emb/).
 
 `check` exists because HNSW is approximate and EF_SEARCH = 100 was measured
@@ -95,7 +95,7 @@ def cmd_load():
 
         t1 = time.time()
         conn.execute("DROP INDEX IF EXISTS idx_chunks_hnsw_ruri")
-        # Same parameters as BGE-M3's index (db_init.py) — one variable at a time.
+        # Same parameters as BGE-M3's index (db_init.py): one variable at a time.
         conn.execute(f"CREATE INDEX idx_chunks_hnsw_ruri ON chunks USING hnsw "
                      f"({CFG['column']} vector_ip_ops) WITH (m = 16, ef_construction = 64)")
         conn.commit()

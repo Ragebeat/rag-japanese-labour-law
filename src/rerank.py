@@ -6,13 +6,13 @@ is almost always in the top ten, but at the top only half the time.
 A bi-encoder (BGE-M3) encodes query and document INDEPENDENTLY, so vectors
 can be precomputed and search is a single multiplication. Fast but coarse.
 A cross-encoder feeds the pair in TOGETHER and sees the interaction between
-words. More accurate, but nothing can be precomputed — the model runs on
+words. More accurate, but nothing can be precomputed: the model runs on
 every pair.
 
 Hence the scheme: the bi-encoder pulls the top N quickly, the cross-encoder
 reorders it.
 
-⚠️ The reranker will NOT raise recall@N for the same N — it does not search
+The reranker will NOT raise recall@N for the same N: it does not search
 again, it rearranges what was already found. r@1, r@3 and MRR go up.
 
   python src/rerank.py "育休っていつまで？"
@@ -31,7 +31,7 @@ from query_llm import expand_combo  # noqa: E402
 MODEL = "BAAI/bge-reranker-v2-m3"
 # Pinned commit on Hugging Face (OWASP: supply chain). Without it the
 # model is "whatever main points to" on the next fresh download: new weights
-# would silently move every rerank score — and the score gate threshold with
+# would silently move every rerank score, and the score gate threshold with
 # them. Part of the run fingerprint. Change on purpose, then re-run
 # score_gate.py and --eval.
 REVISION = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
@@ -70,12 +70,12 @@ class Reranked:
                rerank_on="original", **kw):
         """rerank_on: what to feed the cross-encoder.
 
-        'original'  — the original colloquial question
-        'expanded'  — expanded by the dictionary and the LLM
+        'original'    the original colloquial question
+        'expanded'    expanded by the dictionary and the LLM
 
         Hypothesis: the cross-encoder reads the pair as a whole and may do
         better on the original question, with the added terms acting as noise.
-        But that is a hypothesis — we measure both.
+        But that is a hypothesis: we measure both.
         """
         query = fold_query(query)
         # Two spans split retrieval in two: candidates (query expansion,
@@ -111,7 +111,7 @@ class Reranked:
         Needed for the structural completeness check (verify.py): comparing
         paragraphs of one article against each other.
 
-        rerank_on defaults to 'original' — the same variant as the working
+        rerank_on defaults to 'original': the same variant as the working
         configuration (KW in generate.py). Otherwise the scores would be on a
         different scale from the ones the chunks were selected by.
         """

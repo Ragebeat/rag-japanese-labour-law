@@ -4,7 +4,7 @@ Three decisions taken up front, because retrofitting them costs more:
 
 1. MODELS LIVE IN THE PROCESS. Reranked and the cross-encoder are loaded in
    lifespan and reused. In the CLI scripts the reranker was loaded again on
-   every run — 15 seconds that would otherwise be paid on every web request.
+   every run: 15 seconds that would otherwise be paid on every web request.
 
 2. WE RETURN MORE THAN TEXT. Context with scores, parsed markers, the verdict
    and the list of UNUSED chunks. All of it exists at generation time anyway;
@@ -95,12 +95,12 @@ class Line:
 async def in_thread(fn, *a, **kw):
     """Blocking work off the event loop. retrieve() is 7-13 s of reranking on
     the CPU; called straight from `async def` it froze the whole server,
-    /health included — the classic blocking call inside async, in real code.
+    /health included: the classic blocking call inside async, in real code.
 
     anyio does NOT abandon the thread on cancellation (the default): if the
     client leaves, the request waits for the thread to finish before the
     queue slot is released. A thread cannot be killed; releasing early would
-    start the next request alongside it — two rerankers on one CPU, exactly
+    start the next request alongside it: two rerankers on one CPU, exactly
     what the queue prevents. The same zombie as Tool._busy in agent.py.
     """
     return await anyio.to_thread.run_sync(functools.partial(fn, *a, **kw))
@@ -121,7 +121,7 @@ async def lifespan(app):
 
 app = FastAPI(title="Japanese Labour Law RAG", lifespan=lifespan)
 
-# No CORS middleware — on purpose. It was allow_origins=["*"], and nothing
+# No CORS middleware: on purpose. It was allow_origins=["*"], and nothing
 # needed it: in development Vite proxies /ask to this port, in a demo the
 # built front end is served from this same port. Both are same-origin. The
 # only thing "*" did was let ANY site open in the browser call this API and
@@ -217,7 +217,7 @@ async def ask_stream(req: Ask):
     if the client left before the stream started, a ticket taken outside
     would never reach a finally and would block the queue forever.
     Errors go out as codes, not str(e): exception text can carry internals
-    (paths, hosts, the query itself) — details go to the server log.
+    (paths, hosts, the query itself): details go to the server log.
     """
 
     async def gen():
@@ -253,7 +253,7 @@ async def _answer_frames(req):
         yield _sse("error", {"code": "not_found"})
         return
 
-    # Sources go out before generation — they can already be displayed.
+    # Sources go out before generation: they can already be displayed.
     yield _sse("sources", {"sources": _sources(chunks)})
 
     body = {
@@ -268,7 +268,7 @@ async def _answer_frames(req):
     }
     parts = []
     # The guard sits between the model and the socket: a link is held
-    # back until it is complete and checked — never half-sent.
+    # back until it is complete and checked: never half-sent.
     guard = StreamGuard()
     try:
         async with state["http"].stream("POST", OLLAMA, json=body) as resp:
@@ -294,7 +294,7 @@ async def _answer_frames(req):
         yield _sse("delta", {"text": tail})
 
     # The analysis runs on the complete text: markers and the verdict are
-    # only fully visible at the end. The answer is the guarded one — the
+    # only fully visible at the end. The answer is the guarded one: the
     # same text the user just saw streamed.
     answer = guard_links("".join(parts).strip())[0]
     yield _sse("done", _payload(req.q, chunks, answer, guard.blocked))
@@ -302,7 +302,7 @@ async def _answer_frames(req):
 
 # The built front end, if present. Mounted last so it does not intercept
 # /ask and /health. In development the UI runs on Vite (proxying to :8000),
-# for a demo — npm run build and everything serves from one port.
+# for a demo: npm run build and everything serves from one port.
 _dist = pathlib.Path(__file__).resolve().parent.parent / "web" / "dist"
 if _dist.exists():
     app.mount("/", StaticFiles(directory=_dist, html=True), name="web")

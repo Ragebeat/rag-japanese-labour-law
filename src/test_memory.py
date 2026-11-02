@@ -57,7 +57,7 @@ def raises(fn, exc):
 
 
 def isolation():
-    """Two users in ONE store — the shape a multi-user API would have."""
+    """Two users in ONE store: the shape a multi-user API would have."""
     store = InMemoryStore()
     store.put(namespace("alice"), "prefecture",
               {"value": "群馬県", "stated_at": date.today().isoformat()})

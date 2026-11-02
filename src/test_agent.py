@@ -2,7 +2,7 @@
 
 The detector never fired against the live model during development: the model
 refused or answered before spinning. Provoking a 4B model into a loop to test
-a comparison of sets is the wrong way round — the logic is plain code, so it
+a comparison of sets is the wrong way round: the logic is plain code, so it
 is tested as plain code, on hand-made inputs.
 
   uv run python src/test_agent.py

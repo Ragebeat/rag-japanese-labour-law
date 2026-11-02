@@ -4,7 +4,7 @@ MCP (Model Context Protocol) is a standard way to expose tools to any LLM
 client: Claude Desktop, Claude Code, Cursor, or our own agent. The tool is
 written once; every client gets the same contract.
 
-What travels with the tool and what does not — the main point of this file:
+What travels with the tool and what does not; the main point of this file:
 
   TRAVELS (lives inside Tool): the measured threshold, ok/weak/error per
   sub-query, weak candidates without text, widening to 259 documents, the
@@ -37,7 +37,7 @@ sys.path.insert(0, str(SRC))
 
 from agent import TOOL, Tool  # noqa: E402
 
-# ⚠️ stdio transport: STDOUT IS THE PROTOCOL CHANNEL. Any print() to stdout
+# stdio transport: STDOUT IS THE PROTOCOL CHANNEL. Any print() to stdout
 # lands in the JSON-RPC stream and breaks the client with an error that says
 # nothing about print(). The pipeline does print: query_llm.py writes LLM
 # errors to stdout.
@@ -49,7 +49,7 @@ from agent import TOOL, Tool  # noqa: E402
 # initialize result sitting in the server console.
 #
 # So sys.stdout is never touched. Instead `print` is rebound inside our own
-# modules only — a module looks `print` up in its globals before builtins.
+# modules only: a module looks `print` up in its globals before builtins.
 
 
 def _print_to_stderr(*args, **kwargs):
@@ -108,7 +108,7 @@ def labor_laws_rag(
         return _all_error(queries, f"Search engine failed to load: {_load_error}")
     payload, _keys, _tops, _exps = _tool(queries, k)
     # keys, tops and expansions are for the agent loop and the trace. An MCP
-    # client gets exactly what the model in agent.py sees — nothing more.
+    # client gets exactly what the model in agent.py sees: nothing more.
     return payload
 
 

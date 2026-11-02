@@ -27,7 +27,7 @@ RETRIES = 4              # attempts per batch
 
 
 def embed_batch(client, texts):
-    """Ollama errors here are transient (model swap, timeout) — retry."""
+    """Ollama errors here are transient (model swap, timeout): retry."""
     last = None
     for attempt in range(RETRIES):
         try:
@@ -73,7 +73,7 @@ def main():
         print("vectors.npy has a different shape — starting over")
         done = 0
 
-    # memmap to disk — 20162 x 1024 x 4 bytes ~ 80 MB
+    # memmap to disk: 20162 x 1024 x 4 bytes ~ 80 MB
     vecs = np.lib.format.open_memmap(VECTORS, mode="r+" if done else "w+",
                                      dtype=np.float32, shape=(n, DIM))
 

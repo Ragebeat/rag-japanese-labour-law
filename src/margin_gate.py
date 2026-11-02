@@ -12,15 +12,15 @@ Two candidates, declared before measuring so the prettier one cannot be
 picked afterwards:
   diff  = top1 - top2
   ratio = top1 / top2     (the agent runs suggested "ten times": that is the ratio)
-The threshold for each is set by the same product rule as score_gate.py —
-the 5th percentile of group A — and only then do we look at what came out.
+The threshold for each is set by the same product rule as score_gate.py:
+the 5th percentile of group A, and only then do we look at what came out.
 
 Groups, as in score_gate.py (same reranking pass, same caveats):
-  A — the gold article is in the top 5
-  B — the gold article removed from the pool (ablation; inflated, see there)
-  C — a natural retrieval miss (honest, but n is small)
+  A   the gold article is in the top 5
+  B   the gold article removed from the pool (ablation; inflated, see there)
+  C   a natural retrieval miss (honest, but n is small)
 
-⚠️ golden holds homogeneous colloquial questions, while the agent-run problem
+golden holds homogeneous colloquial questions, while the agent-run problem
 appeared on reformulated ones. So a few PROBES are added: queries from
 the agent runs, each labelled automatically by whether 第24条 came first.
 

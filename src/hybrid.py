@@ -1,6 +1,6 @@
 """Hybrid search: vector + BM25, fused with RRF.
 
-Why RRF and not a weighted sum of scores: cosine gives ~0.58, ts_rank ~0.09 —
+Why RRF and not a weighted sum of scores: cosine gives ~0.58, ts_rank ~0.09:
 the scales are incomparable and drift from query to query. RRF discards the
 scores and works on positions alone:
 
@@ -65,13 +65,13 @@ POOL = 50          # how many we take from each method before fusion
 #   ef_search=40  (default) -> 第39条 does not make the top 10 at all
 #   ef_search=100            -> 第39条 in 6th place (= exact numpy scan)
 #   ef_search=400            -> the same, no further gain
-# The default drops results SILENTLY — no error, no warning.
+# The default drops results SILENTLY: no error, no warning.
 #
 # Ruri v3 (embed_ruri.py check, golden queries, core, top-20 overlap
 # with the exact scan):  ef 40 -> 0.914 (worst 0.25) · 100 -> 0.973 (worst
 # 0.75) · 200 -> 0.998 · 400 -> 0.999. The value tuned on BGE-M3 loses 3% of
 # Ruri's pool, up to a quarter on one question: a different model is a
-# different geometry. 200 for both columns — for BGE-M3 a higher ef only
+# different geometry. 200 for both columns: for BGE-M3 a higher ef only
 # costs latency, it cannot reduce recall.
 EF_SEARCH = 200
 
@@ -87,7 +87,7 @@ class Hybrid:
         self.column = EMBEDDERS[self.embedder]["column"]
         # autocommit: this class only reads. Without it every SELECT opened a
         # transaction that stayed open for the life of the process (uvicorn,
-        # the agent, the MCP server) — holding a lock that made ALTER TABLE
+        # the agent, the MCP server): holding a lock that made ALTER TABLE
         # in embed_ruri.py wait forever, and leaving "unexpected EOF on
         # client connection with an open transaction" in the Postgres log.
         self.conn = psycopg.connect(DSN, autocommit=True)
@@ -182,7 +182,7 @@ class Hybrid:
 
         # multi-query: search by BOTH query variants and fuse.
         # Solves a problem seen in the measurements: expansion fixes 7 questions
-        # but breaks 3 — the ones where the original ranked first. Fusion keeps
+        # but breaks 3: the ones where the original ranked first. Fusion keeps
         # such a result: it still earns 1/(60+1) from its own list.
         if mode == "multiquery":
             exp, extra = _do_expand(query)

@@ -1,9 +1,9 @@
 """Database schema, plus loading chunks with vectors and a Japanese tsvector.
 
-  python src/db_init.py schema   — create the table (DROP + CREATE)
-  python src/db_init.py load     — load the data
-  python src/db_init.py index    — build the indexes
-  python src/db_init.py stats    — check what came out
+  python src/db_init.py schema     create the table (DROP + CREATE)
+  python src/db_init.py load       load the data
+  python src/db_init.py index      build the indexes
+  python src/db_init.py stats      check what came out
 
 Indexes are built AFTER loading. Building them first means rebuilding the
 tree on every INSERT.

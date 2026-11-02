@@ -6,12 +6,12 @@ Two levels, measured separately:
    no reranker. recall@5 is what goes into the context without a reranker;
    recall@20 is the ceiling the reranker can pull from (pool = 20). A model
    that loses at @5 but wins at @20 may win after reranking.
-2. FULL PIPELINE — only for the leader of level 1, against BGE-M3. Not here:
+2. FULL PIPELINE, only for the leader of level 1, against BGE-M3. Not here:
    the expansion dictionary and the gate were tuned on BGE-M3's misses, so
    the full pipeline is home ground for the incumbent.
 
 Fairness rules:
-- the SAME text for every model: c["text"], header line included — exactly
+- the SAME text for every model: c["text"], header line included, exactly
   what BGE-M3 embedded in embed.py
 - core only (7 452 chunks): golden is evaluated on core
 - each model gets ITS OWN prefixes. Forgetting them drops recall silently,
@@ -51,7 +51,7 @@ MAXK = max(KS)
 SLICE = 128          # chunks per encode call between checkpoints
 
 # key -> (HF id, query prefix, document prefix, revision). Prefixes from the
-# model cards; revisions pinned 01.10 — the commits the
+# model cards; revisions pinned 01.10: the commits the
 # vectors in data/emb/ were computed with.
 MODELS = {
     "multilingual-e5-large": ("intfloat/multilingual-e5-large",
@@ -119,7 +119,7 @@ def encode_docs(model, key, texts, prefix):
 
 
 def truncated(model, texts, prefix):
-    """How many inputs exceed the model's window — they are cut silently."""
+    """How many inputs exceed the model's window: they are cut silently."""
     limit = model.max_seq_length
     tok = model.tokenizer
     lens = [len(tok(prefix + t, add_special_tokens=True)["input_ids"]) for t in texts]
@@ -127,7 +127,7 @@ def truncated(model, texts, prefix):
 
 
 def run_baseline(golden, core_idx, meta):
-    """The existing BGE-M3 vectors and Ollama for queries — the configuration
+    """The existing BGE-M3 vectors and Ollama for queries: the configuration
     every BGE-M3 number was measured on."""
     idx = Index()
     vecs = idx.vecs[core_idx]
@@ -187,7 +187,7 @@ def main():
     r5 = report[BASELINE]["metrics"]["recall@5"]
     print(f"\nbaseline {BASELINE}: recall@5 = {r5:.3f}  (eval.py core: 0.68)")
     if abs(r5 - 0.68) > 1e-9:
-        print("⚠ the baseline does not reproduce eval.py — the comparison below is invalid, investigate first")
+        print("WARNING: the baseline does not reproduce eval.py; the comparison below is invalid, investigate first")
 
     for key in MODELS:
         if only and only not in key:
@@ -201,7 +201,7 @@ def main():
         m = rep["metrics"]
         print(f"{key:<24}" + "".join(f"{m[f'recall@{k}']:>8.3f}" for k in KS)
               + f"{m['MRR@20']:>8.3f}")
-    print("⚠ 50 questions: a difference below 0.02 (one question) is noise")
+    print("WARNING: 50 questions: a difference below 0.02 (one question) is noise")
 
     for key, rep in report.items():
         if key == BASELINE:

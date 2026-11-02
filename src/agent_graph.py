@@ -2,7 +2,7 @@
 
 LangGraph describes an agent as a graph: nodes do the work, edges decide what
 runs next, and one state object travels through. agent.py already WAS such a
-graph — its transitions were `if`s inside a `while`. Here they have names.
+graph: its transitions were `if`s inside a `while`. Here they have names.
 
 What the move to a graph forced:
 
@@ -10,9 +10,9 @@ What the move to a graph forced:
    budget and the loop detector live in plain dicts, loaded into the same
    tested classes (Budget, Progress) inside a node and written back.
 2. HUMAN WAIT IS NOT BUDGET. The time budget stores seconds SPENT, not a start
-   time — a graph paused for an hour must not wake up out of time.
+   time: a graph paused for an hour must not wake up out of time.
 3. A NODE WITH interrupt() RUNS TWICE. On resume the node re-executes from the
-   top. Nothing before interrupt() may have side effects — or cost much.
+   top. Nothing before interrupt() may have side effects, or cost much.
 
 Memory, three kinds:
 
@@ -23,24 +23,24 @@ always carries the current long-term facts.
 COMPACTION = keep conclusions, drop raw material (the same rule as agent.py). After
 every answer the full article texts are stripped from old tool messages; the
 (law, article) registry and the answers stay. One round of two sub-questions
-was +9 000 tokens — without this, the second question would not fit.
+was +9 000 tokens: without this, the second question would not fit.
 
 LONG-TERM = a store across threads, and here the design decisions matter more
 than the code:
   - ALLOW-LIST, not deny-list. Only employment type, company size and
     prefecture can ever be stored. Pregnancy, health, disputes cannot be
-    proposed at all — there is no field for them. A deny-list of "sensitive
+    proposed at all: there is no field for them. A deny-list of "sensitive
     words" would leak the first phrasing nobody anticipated.
   - THE MODEL PROPOSES, CODE VERIFIES, THE HUMAN DECIDES. gemma extracts
     candidates; code keeps only values literally present in what the user
-    said (no inference — "asks about 育休, so probably..." is rejected);
+    said (no inference: "asks about 育休, so probably..." is rejected);
     the user confirms through interrupt().
   - EVERY FACT CARRIES A DATE. Facts go stale; after 90 days code marks them
     for re-confirmation instead of trusting them.
   - THE EXPENSIVE CALL SITS OUTSIDE THE interrupt() NODE. Extraction is in
     `propose`, the pause is in `confirm_memory`: otherwise the LLM call would
     run twice (point 3 above).
-  - /forget DELETES. Not a flag, not "used to be" — the file loses the lines.
+  - /forget DELETES. Not a flag, not "used to be": the file loses the lines.
 
   uv run python src/agent_graph.py --trace
   uv run python src/agent_graph.py --trace --hitl "会社が住民税を給料から天引きするのは合法？"
@@ -93,12 +93,12 @@ STALE_DAYS = 90
 
 # OWASP review. The namespace used to be ("users", "local",
 # "profile") with one file: harmless while the graph is a CLI for one
-# person, a cross-user leak the day it is put behind an API — user B would
+# person, a cross-user leak the day it is put behind an API: user B would
 # get user A's facts in the system prompt. Now every memory function
 # REQUIRES a user_id, so wiring the graph to an API cannot forget isolation:
 # without an id the code does not run.
 #
-# The id comes from authentication at the entry point — never from the
+# The id comes from authentication at the entry point: never from the
 # request body, never from the model. It also becomes a file name, hence the
 # strict pattern: "../profile" must not escape data/memory/.
 USER_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -127,7 +127,7 @@ def check_owner(values, user_id):
 class State(TypedDict, total=False):
     messages: list
     question: str
-    human_notes: list    # what the human typed at ask_human — also user speech
+    human_notes: list    # what the human typed at ask_human: also user speech
     found: list          # [law, article] from `ok` results
     called: bool
     nudged: bool
@@ -139,10 +139,10 @@ class State(TypedDict, total=False):
     budget: dict | None
     progress: dict | None
     proposal: dict | None
-    owner: str           # user_id that started the thread — see check_owner
+    owner: str           # user_id that started the thread: see check_owner
 
 
-# ─────────────────────── state <-> the tested objects ────────────────────────
+# --- state <-> the tested objects ---
 
 def load_budget(d):
     b = Budget()
@@ -172,7 +172,7 @@ def dump_progress(p):
             "best": p.best, "stalls": p.stalls}
 
 
-# ───────────────────────────── long-term memory ──────────────────────────────
+# --- long-term memory ---
 
 # The allow-list. Adding a field here is a privacy decision, not a code change.
 LABELS = {"employment_type": "雇用形態", "company_size": "会社の従業員数",
@@ -182,7 +182,7 @@ EMPLOYMENT = {"正社員": ["正社員"], "パート": ["パート"],
               "派遣": ["派遣"]}
 
 # Prefecture: a closed list, not "a string the user typed". The first
-# check accepted any value literally present in the user's text — so a long
+# check accepted any value literally present in the user's text, so a long
 # instruction passed off as a prefecture would pass, get confirmed, and land
 # in the SYSTEM PROMPT of every later conversation: a stored injection.
 # (It also had a bug: rstrip("都道府県") strips any of those characters,
@@ -222,7 +222,7 @@ EXTRACT = """ユーザーの発言から、本人が明言した事実だけを�
 - company_size: 勤務先の従業員数（整数）
 - prefecture: 勤務地の都道府県"""
 
-# The schema allows null for every field — without a slot for "not said" the
+# The schema allows null for every field: without a slot for "not said" the
 # model invents a value.
 EXTRACT_SCHEMA = {
     "type": "object",
@@ -309,7 +309,7 @@ def verify_stated(facts, text):
     """Keeps only values that literally occur in what the user said.
 
     The model is asked not to infer; this makes it impossible. "三十人" in
-    kanji numerals is rejected too — a missed fact is cheap, a stored guess
+    kanji numerals is rejected too: a missed fact is cheap, a stored guess
     is not.
     """
     t = unicodedata.normalize("NFKC", text)
@@ -326,7 +326,7 @@ def verify_stated(facts, text):
     return out
 
 
-# ─────────────────────────────── the graph ───────────────────────────────────
+# --- the graph ---
 
 def build(tool, http, store, user_id, hitl=False, trace=False):
     t_start = time.monotonic()
@@ -335,7 +335,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         if trace:
             print(f"  {time.monotonic() - t_start:6.1f}s  {s}")
 
-    # ── nodes: the search loop ──────────────────────────────────────────────
+    # --- nodes: the search loop ---
 
     def model(s):
         b = load_budget(s.get("budget"))
@@ -423,7 +423,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
                 "reframed": True}
 
     def ask_human(s):
-        # Nothing above interrupt() may have side effects — see point 3.
+        # Nothing above interrupt() may have side effects: see point 3.
         ans = interrupt({"kind": "ask", "weak": s["weak_qs"],
                          "prompt": "Nothing found for these sub-questions. Rephrase, "
                                    "or describe the situation (empty — "
@@ -465,14 +465,14 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
         return {"answer": s["messages"][-1].get("content", "").strip(),
                 "stop": "answered", "ungrounded": not s.get("called")}
 
-    # ── nodes: memory ───────────────────────────────────────────────────────
+    # --- nodes: memory ---
 
     def compact(s):
         """Keep conclusions, drop raw material.
 
         Tool messages keep the query, the status and the (law, article)
         registry; the article texts go. If a later question needs an article
-        again, one search brings it back — cheaper than carrying it forever.
+        again, one search brings it back: cheaper than carrying it forever.
         """
         msgs, before, after = [], 0, 0
         for m in s["messages"]:
@@ -522,7 +522,7 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
             log("[confirm_memory] declined — nothing saved")
         return {"proposal": None}
 
-    # ── edges ────────────────────────────────────────────────────────────────
+    # --- edges ---
 
     def after_model(s):
         if s.get("stop"):
@@ -565,12 +565,12 @@ def build(tool, http, store, user_id, hitl=False, trace=False):
     g.add_edge("confirm_memory", END)
 
     # The checkpointer holds short-term memory (per thread); the store holds
-    # long-term memory (across threads). InMemorySaver dies with the process —
+    # long-term memory (across threads). InMemorySaver dies with the process:
     # a conversation does not survive a restart, the profile file does.
     return g.compile(checkpointer=InMemorySaver())
 
 
-# ───────────────────────────────── cli ───────────────────────────────────────
+# --- cli ---
 
 def show(values):
     b = values.get("budget") or {}
@@ -579,11 +579,11 @@ def show(values):
     print("\n— answer —")
     print(answer)
     if blocked:
-        print(f"⚠ links outside the allow-list removed: {blocked}")
+        print(f"WARNING: links outside the allow-list removed: {blocked}")
     print(f"\n[stop: {values.get('stop')}  iterations: {b.get('iters')}  "
           f"tokens: {b.get('tokens')}  time: {b.get('spent', 0):.1f}s]")
     if values.get("ungrounded"):
-        print("⚠ answered without a single search")
+        print("WARNING: answered without a single search")
 
 
 def run_turn(graph, thread, q, store, user_id):
@@ -617,7 +617,7 @@ def _run_turn(graph, thread, q, store, user_id):
             if not shown:
                 show(st.values)       # the answer first, the memory question after
                 shown = True
-            print("\n💾 Remember for next time (only what you said yourself):")
+            print("\nRemember for next time (only what you said yourself):")
             for k, v in p["proposal"].items():
                 print(f"   · {LABELS[k]}: {v}")
             out = graph.invoke(Command(resume=input("  save? (y/n) > ")), config)
