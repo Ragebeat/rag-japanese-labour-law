@@ -258,7 +258,7 @@ OWASP Top 10 for LLM Applications（2026年版）に照らして確認しまし�
 
 - **トレースは既定で内容を記録しません。** すべてのステップを Phoenix + OpenTelemetry でトレースしますが、`TRACE_CONTENT=1` を指定しない限り、質問・プロンプト・回答・ツール引数はマスクされ、長さだけが残ります。このプロジェクトのレイテンシに関する知見は、すべてメタデータだけから得られました。全文のトレースは、ユーザーの質問とエージェントの記憶の保管庫になってしまいます。例外は型だけを記録します。Phoenix は localhost にのみバインドしています
 - **API。** CORS ミドルウェアはありません（以前は `*` でしたが不要でした。開発時は Vite のプロキシ経由、ビルド後の UI は同一オリジンです）。リクエストは一度に 1 件で、上限付きの FIFO キューを使います。クライアントには SSE でキュー内の順番が届き、キューが満杯のときだけ 429 を返します。検索はイベントループの外で実行し、再ランキングの途中でクライアントが離脱しても、スレッドが終わるまで枠は確保されたままです。エラーはコードで返し、詳細はログに残します
-- **エージェントの記憶**（`agent_graph.py`）は `user_id` ごとに分離しています。`user_id` は必須パラメータで、ファイル名になるため検証しています。スレッドは所有者を記録し、履歴を読む前に照合します
+- **エージェントの記憶**（`agent/graph.py`）は `user_id` ごとに分離しています。`user_id` は必須パラメータで、ファイル名になるため検証しています。スレッドは所有者を記録し、履歴を読む前に照合します
 - **バージョン固定**：再ランカーと Ruri は Hugging Face のコミットで固定し（再ランカーのコミットは実行のフィンガープリントに含まれます）、Phoenix はイメージのダイジェストで固定しています
 
 ---
@@ -358,25 +358,25 @@ uv sync
 
 # data/manifest.json はコミット済みで、各法令の版（law_revision_id）を固定しています。
 # fetch_manifest.py は現在の e-Gov の一覧から作り直します。新しい本文に移るときだけ使います。
-uv run python src/download_laws.py            # 法令本文（XML）、固定した版
-uv run python src/chunk.py                    # チャンク分割
-uv run python src/db_init.py schema           # テーブル作成（既存なら作り直し）
-uv run python src/db_init.py load             # チャンク。embed.py なしでは BGE-M3 の列は空のまま
-uv run python src/db_init.py index            # 索引（投入の後）
-uv run python src/embed_ruri.py encode        # コーパス全体の Ruri。CPU、data/emb/ にキャッシュ、再開可能
-uv run python src/embed_ruri.py load          # embedding_ruri 列 + HNSW
+uv run python -m rag.ingest.download_laws     # 法令本文（XML）、固定した版
+uv run python -m rag.ingest.chunk             # チャンク分割
+uv run python -m rag.index.db_init schema     # テーブル作成（既存なら作り直し）
+uv run python -m rag.index.db_init load       # チャンク。embed.py なしでは BGE-M3 の列は空のまま
+uv run python -m rag.index.db_init index      # 索引（投入の後）
+uv run python -m rag.index.embed_ruri encode  # コーパス全体の Ruri。CPU、data/emb/ にキャッシュ、再開可能
+uv run python -m rag.index.embed_ruri load    # embedding_ruri 列 + HNSW
 
-uv run python src/generate.py "有給って入社してすぐもらえるの？"
-uv run python src/test_quotes.py; uv run python src/test_guard.py; uv run python src/test_agent.py; uv run python src/test_memory.py
+uv run python -m rag.generation.generate "有給って入社してすぐもらえるの？"
+uv run pytest
 ```
 
 Web:
 
 ```bash
-uv run uvicorn src.api:app --port 8000        # API + SSE、Swagger は /docs
+uv run uvicorn rag.api:app --port 8000  # API + SSE、Swagger は /docs
 
-cd web && npm install && npm run dev          # 画面は :5173
-cd web && npm run build                       # ビルド。同じ FastAPI が配信
+cd web && npm install && npm run dev    # 画面は :5173
+cd web && npm run build                 # ビルド。同じ FastAPI が配信
 ```
 
 ### 実験を再現する
@@ -384,19 +384,19 @@ cd web && npm run build                       # ビルド。同じ FastAPI が�
 上のシステムに追加します。さらに `ollama pull bge-m3` と、`verify.py` 用に `ollama pull qwen3:8b` が必要です。この README の生成の数値はすべて `gemma4:e4b` で測定しています。
 
 ```bash
-uv run python src/analyze.py                  # チャンク規則の元になったコーパス統計
-uv run python src/embed.py                    # BGE-M3 のベクトル（約25分）
-uv run python src/db_init.py schema           # BGE-M3 の列を埋めて投入し直す
-uv run python src/db_init.py load
-uv run python src/db_init.py index
-uv run python src/embed_ruri.py load          # schema で Ruri の列も消えるため。ベクトルはキャッシュ済み
-uv run python src/embed_ruri.py check         # ef_search ごとに HNSW と厳密検索を比較
-uv run python src/embed_compare.py            # 埋め込みモデルの比較（全モデル。--only ruri で 1 つ）
+uv run python -m rag.ingest.analyze                # チャンク規則の元になったコーパス統計
+uv run python -m rag.index.embed                   # BGE-M3 のベクトル（約25分）
+uv run python -m rag.index.db_init schema          # BGE-M3 の列を埋めて投入し直す
+uv run python -m rag.index.db_init load
+uv run python -m rag.index.db_init index
+uv run python -m rag.index.embed_ruri load         # schema で Ruri の列も消えるため。ベクトルはキャッシュ済み
+uv run python -m rag.index.embed_ruri check        # ef_search ごとに HNSW と厳密検索を比較
+uv run python -m experiments.embed_compare         # 埋め込みモデルの比較（全モデル。--only ruri で 1 つ）
 
-uv run python src/generate.py --eval          # golden での実行。data/runs.jsonl に記録
-uv run python src/compare.py                  # 直近 2 回の実行を質問ごとに比較
-uv run python src/generate.py --ablate        # 根拠がない場合の回答拒否
-uv run python src/verify.py --calibrate       # 判定モデルの較正
+uv run python -m rag.generation.generate --eval    # golden での実行。data/runs.jsonl に記録
+uv run python -m experiments.compare               # 直近 2 回の実行を質問ごとに比較
+uv run python -m rag.generation.generate --ablate  # 根拠がない場合の回答拒否
+uv run python -m experiments.verify --calibrate    # 判定モデルの較正
 ```
 
 その他の実験は、スクリプトと結果ファイルの対応を「数値の出所」に載せています。正確なコマンドは各スクリプトの docstring にあります。
@@ -417,10 +417,10 @@ uv run python src/verify.py --calibrate       # 判定モデルの較正
 
 **回答**
 - ▶ `generate.py` — 検索 + 生成 + 回答の全検査。`--eval`、`--ablate`、実行ログ（`data/runs.jsonl`）もここ
-- ▶ `api.py` — 同じパイプラインの FastAPI + SSE（`uvicorn src.api:app`）。画面は `web/`
+- ▶ `api.py` — 同じパイプラインの FastAPI + SSE（`uvicorn rag.api:app`）。画面は `web/`
 
 **検索モジュール**
-- `env.py` — `.env` の読み込みとデータベース接続文字列
+- `config.py` — `.env` の読み込みとデータベース接続文字列
 - `hybrid.py` — Postgres での検索：ベクトル（Ruri または BGE-M3）、BM25、RRF による統合、任意のクエリ拡張
 - `rerank.py` — `hybrid.py` の上でのクロスエンコーダ再ランキング
 - `query_expand.py` — 「日常語 → 法令用語」辞書（`data/synonyms.json`）。用語ヒントもここから
@@ -437,7 +437,7 @@ uv run python src/verify.py --calibrate       # 判定モデルの較正
 - ▶ `expand_golden.py` — 不採用にした golden の拡張 · ▶ `toc.py` — golden の正解確認用の法令閲覧
 
 **エージェント**（「拡張」を参照）
-- ▶ `agent.py` — 素の ReAct ループ · ▶ `agent_graph.py` — 記憶つきの LangGraph 版 · `mcp_server.py` — MCP 経由のツール（MCP クライアントが起動）
+- ▶ `agent/loop.py` — 素の ReAct ループ · ▶ `agent/graph.py` — 記憶つきの LangGraph 版 · `mcp_server.py` — MCP 経由のツール（MCP クライアントが起動）
 
 **その他**
 - `tracing.py` — Phoenix 用の OpenTelemetry スパン。内容は既定で非表示
@@ -453,9 +453,9 @@ Python 3.14 · Postgres 17 + pgvector · Ollama（gemma4:e4b。以前のパイ�
 
 同じ検索をツールとして包み、複数の制度にまたがる質問（「育休中に残業させられる？」は育児休業と労働時間の両方に関わります）に使います。各層が何を加えるかを確かめるため、次の 3 つの形をこの順に作りました。
 
-**`agent.py` — フレームワークなしの素の ReAct ループ。** 何を検索し、いつ十分とするかはモデルが決め、いつ止めるかはコードが決めます。反復回数・トークン・コンテキストの増加・経過時間に予算を設け、さらに繰り返しではなく進捗を測るループ検出を入れました。新しい条文が得られない検索ラウンドは停滞と数え、それが続くとループを止めます。予算が尽きたときは最終ターンを強制し、モデルが使えないときは決定的なフォールバックに切り替えます。ツールのエラーは例外ではなく、モデルが対処できるメッセージとして返します。ツールはまずコアを検索し、再ランカーのスコアが低ければコーパス全体に広げます。`test_agent.py` は、ループ検出と予算を、手作りの入力に対する普通のコードとしてテストします。実際の 4B モデルはループする前に拒否か回答をしてしまい、集合の比較を試すためにわざとループさせるのは順序が逆だからです。
+**`agent/loop.py` — フレームワークなしの素の ReAct ループ。** 何を検索し、いつ十分とするかはモデルが決め、いつ止めるかはコードが決めます。反復回数・トークン・コンテキストの増加・経過時間に予算を設け、さらに繰り返しではなく進捗を測るループ検出を入れました。新しい条文が得られない検索ラウンドは停滞と数え、それが続くとループを止めます。予算が尽きたときは最終ターンを強制し、モデルが使えないときは決定的なフォールバックに切り替えます。ツールのエラーは例外ではなく、モデルが対処できるメッセージとして返します。ツールはまずコアを検索し、再ランカーのスコアが低ければコーパス全体に広げます。`test_agent.py` は、ループ検出と予算を、手作りの入力に対する普通のコードとしてテストします。実際の 4B モデルはループする前に拒否か回答をしてしまい、集合の比較を試すためにわざとループさせるのは順序が逆だからです。
 
-**`agent_graph.py` — 同じエージェントを LangGraph の状態グラフとして。** ループ内の `if` が名前付きのノードとエッジになり、ループにはなかった 3 つのものが得られます。
+**`agent/graph.py` — 同じエージェントを LangGraph の状態グラフとして。** ループ内の `if` が名前付きのノードとエッジになり、ループにはなかった 3 つのものが得られます。
 - **スレッド**：同じ会話の追加質問は状態を共有し、古いツール出力は圧縮されます。結論と条文の一覧は残し、生のテキストは捨てるため、2 問目もコンテキストに収まります
 - **ヒューマン・イン・ザ・ループ**：検索が弱いとき、グラフは `interrupt()` で一時停止し、ユーザーに確認を求めます
 - **確認付きの長期記憶**：法的な回答を左右するユーザーの事実（都道府県、雇用形態、会社の規模）を発言から抽出し、閉じた選択肢と照合し、推測ではなく本人が述べたことかを確かめたうえで、「はい」の後にだけ保存します。記憶はシステムプロンプトに入るため、そこに書かれたものは再起動後も残るインジェクションになります。閉じた選択肢と確認はそのためです。`user_id` ごとに分離し、90 日を超えた事実は再確認の対象にします。`test_memory.py`
@@ -463,10 +463,10 @@ Python 3.14 · Postgres 17 + pgvector · Ollama（gemma4:e4b。以前のパイ�
 **`mcp_server.py` — MCP 経由のツール。** Claude Desktop に登録してあり、別のモデルが別のループで同じ検索を使えます。トレードオフは明確です。MCP クライアントは独自のループを回すので上記の予算はどれも効かず、ツールが返すテキストは、実際の権限を持つ他のツールがあるかもしれないクライアントに届きます。そちら側の防御はクライアントの責任です。
 
 ```bash
-uv run python src/agent.py "育休中に残業させられる？"
-uv run python src/agent_graph.py              # 対話モード。/mem で記憶を表示、/forget で消去
-uv run python src/test_agent.py
-uv run python src/test_memory.py
+uv run python -m rag.agent.loop "育休中に残業させられる？"
+uv run python -m rag.agent.graph  # 対話モード。/mem で記憶を表示、/forget で消去
+uv run pytest tests/test_agent.py
+uv run pytest tests/test_memory.py
 ```
 
 ⚠️ コーパス全体に広げる分岐はスコアのしきい値に依存していますが、Ruri ではこのしきい値が正解と取りこぼしを分けられなくなっています（未解決の課題を参照）。現在のしきい値では、この分岐はほとんど作動しません。

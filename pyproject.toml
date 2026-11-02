@@ -32,7 +32,26 @@ dependencies = [
 #    the CPU: a faster rerank for a slower generation.
 # All measurements in the README were made with the reranker on the CPU.
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "ruff>=0.17.3",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# langsmith (pulled in by langgraph) uses an asyncio API deprecated in 3.14
+filterwarnings = ["ignore::DeprecationWarning:langsmith.*"]
+
 [tool.ruff]
+src = ["src", "."]
 line-length = 100
 target-version = "py314"
 

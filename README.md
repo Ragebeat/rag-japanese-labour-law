@@ -258,7 +258,7 @@ The check is an allow-list of domains (e-Gov, MHLW), not "is the link in the sou
 
 - **Traces without content by default.** Every step is traced (Phoenix + OpenTelemetry), but questions, prompts, answers and tool arguments are masked unless `TRACE_CONTENT=1`; the length survives. Every latency finding in this project came from metadata alone, and full traces would otherwise be a store of user questions and agent memory. Exceptions are recorded by type only. Phoenix binds to localhost
 - **API.** No CORS middleware (it was `*`, and nothing needed it: dev goes through the Vite proxy, the built UI is same-origin). One request at a time with a bounded FIFO queue — the client sees its position over SSE, 429 only when the queue is full. Retrieval runs off the event loop; if a client leaves mid-rerank, the slot is held until the thread finishes. Errors go out as codes, details to the log
-- **Agent memory** (`agent_graph.py`) is isolated per `user_id`, a required parameter, validated because it becomes a file name; a thread records its owner and is checked before its history is read
+- **Agent memory** (`agent/graph.py`) is isolated per `user_id`, a required parameter, validated because it becomes a file name; a thread records its owner and is checked before its history is read
 - **Pinned versions**: reranker and Ruri by Hugging Face commit (the reranker's is part of the run fingerprint), Phoenix by image digest
 
 ---
@@ -358,25 +358,25 @@ uv sync
 
 # data/manifest.json is committed and pins each statute to a revision (law_revision_id);
 # fetch_manifest.py rebuilds it from today's e-Gov list — only to move to newer texts.
-uv run python src/download_laws.py            # statute bodies (XML), the pinned revisions
-uv run python src/chunk.py                    # chunking
-uv run python src/db_init.py schema           # table (drops it if it exists)
-uv run python src/db_init.py load             # chunks; the BGE-M3 column stays empty without embed.py
-uv run python src/db_init.py index            # indexes, after loading
-uv run python src/embed_ruri.py encode        # Ruri for the whole corpus: CPU, cached in data/emb/, resumable
-uv run python src/embed_ruri.py load          # column embedding_ruri + HNSW
+uv run python -m rag.ingest.download_laws     # statute bodies (XML), the pinned revisions
+uv run python -m rag.ingest.chunk             # chunking
+uv run python -m rag.index.db_init schema     # table (drops it if it exists)
+uv run python -m rag.index.db_init load       # chunks; the BGE-M3 column stays empty without embed.py
+uv run python -m rag.index.db_init index      # indexes, after loading
+uv run python -m rag.index.embed_ruri encode  # Ruri for the whole corpus: CPU, cached in data/emb/, resumable
+uv run python -m rag.index.embed_ruri load    # column embedding_ruri + HNSW
 
-uv run python src/generate.py "有給って入社してすぐもらえるの？"
-uv run python src/test_quotes.py; uv run python src/test_guard.py; uv run python src/test_agent.py; uv run python src/test_memory.py
+uv run python -m rag.generation.generate "有給って入社してすぐもらえるの？"
+uv run pytest
 ```
 
 Web:
 
 ```bash
-uv run uvicorn src.api:app --port 8000        # API + SSE, Swagger at /docs
+uv run uvicorn rag.api:app --port 8000  # API + SSE, Swagger at /docs
 
-cd web && npm install && npm run dev          # UI on :5173
-cd web && npm run build                       # build; served by the same FastAPI
+cd web && npm install && npm run dev    # UI on :5173
+cd web && npm run build                 # build; served by the same FastAPI
 ```
 
 ### Reproduce the experiments
@@ -384,19 +384,19 @@ cd web && npm run build                       # build; served by the same FastAP
 On top of the system above. Also needs `ollama pull bge-m3`, and `ollama pull qwen3:8b` for `verify.py`. Every generation number in this README was measured on `gemma4:e4b`.
 
 ```bash
-uv run python src/analyze.py                  # corpus statistics behind the chunking rules
-uv run python src/embed.py                    # BGE-M3 vectors (~25 min)
-uv run python src/db_init.py schema           # reload with the BGE-M3 column filled
-uv run python src/db_init.py load
-uv run python src/db_init.py index
-uv run python src/embed_ruri.py load          # schema dropped the Ruri column; the vectors are cached
-uv run python src/embed_ruri.py check         # HNSW vs exact search per ef_search
-uv run python src/embed_compare.py            # embedder comparison (all models; --only ruri for one)
+uv run python -m rag.ingest.analyze                # corpus statistics behind the chunking rules
+uv run python -m rag.index.embed                   # BGE-M3 vectors (~25 min)
+uv run python -m rag.index.db_init schema          # reload with the BGE-M3 column filled
+uv run python -m rag.index.db_init load
+uv run python -m rag.index.db_init index
+uv run python -m rag.index.embed_ruri load         # schema dropped the Ruri column; the vectors are cached
+uv run python -m rag.index.embed_ruri check        # HNSW vs exact search per ef_search
+uv run python -m experiments.embed_compare         # embedder comparison (all models; --only ruri for one)
 
-uv run python src/generate.py --eval          # golden-set run, logged to data/runs.jsonl
-uv run python src/compare.py                  # diff the last two runs, per question
-uv run python src/generate.py --ablate        # refusal when the source is absent
-uv run python src/verify.py --calibrate       # judge calibration
+uv run python -m rag.generation.generate --eval    # golden-set run, logged to data/runs.jsonl
+uv run python -m experiments.compare               # diff the last two runs, per question
+uv run python -m rag.generation.generate --ablate  # refusal when the source is absent
+uv run python -m experiments.verify --calibrate    # judge calibration
 ```
 
 Every other experiment is listed with its script and result file in *Where the numbers come from*; each script's docstring gives its exact command.
@@ -417,10 +417,10 @@ Every script starts with a docstring that says what it does and how to run it. �
 
 **Answering**
 - ▶ `generate.py` — retrieval + generation + all answer checks; also `--eval`, `--ablate`, the run log (`data/runs.jsonl`)
-- ▶ `api.py` — FastAPI + SSE over the same pipeline (`uvicorn src.api:app`); the UI is in `web/`
+- ▶ `api.py` — FastAPI + SSE over the same pipeline (`uvicorn rag.api:app`); the UI is in `web/`
 
 **Retrieval modules**
-- `env.py` — `.env` loading and the database DSN
+- `config.py` — `.env` loading and the database DSN
 - `hybrid.py` — search in Postgres: vector (Ruri or BGE-M3), BM25, RRF fusion, optional query expansion
 - `rerank.py` — cross-encoder reranking on top of `hybrid.py`
 - `query_expand.py` — the colloquial → statutory dictionary (`data/synonyms.json`); also feeds the term hint
@@ -437,7 +437,7 @@ Every script starts with a docstring that says what it does and how to run it. �
 - ▶ `expand_golden.py` — the rejected golden-set expansion · ▶ `toc.py` — browse a statute to verify golden answers
 
 **Agent** (see *Extension*)
-- ▶ `agent.py` — bare ReAct loop · ▶ `agent_graph.py` — the LangGraph version with memory · `mcp_server.py` — the tool over MCP (started by an MCP client)
+- ▶ `agent/loop.py` — bare ReAct loop · ▶ `agent/graph.py` — the LangGraph version with memory · `mcp_server.py` — the tool over MCP (started by an MCP client)
 
 **Other**
 - `tracing.py` — OpenTelemetry spans for Phoenix, content masked by default
@@ -453,9 +453,9 @@ Python 3.14 · Postgres 17 + pgvector · Ollama (gemma4:e4b; BGE-M3 for the earl
 
 The same retrieval, wrapped as a tool, for questions that span several institutions (「育休中に残業させられる？」 touches both parental leave and working hours). Three forms, built in this order to see what each layer adds.
 
-**`agent.py` — a bare ReAct loop, no framework.** The model decides what to search for and when it has enough; the code decides when to stop. Budgets on iterations, tokens, context growth and wall time, plus a loop detector that measures progress rather than repetition: a search round that brings no new articles counts as a stall, and several in a row stop the loop. A forced final turn when a budget runs out, and a deterministic fallback when the model is unavailable. Tool errors go back to the model as messages it can act on, not as exceptions. The tool searches the core first and widens to the full corpus when the reranker score is low. `test_agent.py` tests the loop detector and the budget as plain code on hand-made inputs — the live 4B model refused or answered before it ever looped, and provoking it into a loop to test a set comparison would be the wrong way round.
+**`agent/loop.py` — a bare ReAct loop, no framework.** The model decides what to search for and when it has enough; the code decides when to stop. Budgets on iterations, tokens, context growth and wall time, plus a loop detector that measures progress rather than repetition: a search round that brings no new articles counts as a stall, and several in a row stop the loop. A forced final turn when a budget runs out, and a deterministic fallback when the model is unavailable. Tool errors go back to the model as messages it can act on, not as exceptions. The tool searches the core first and widens to the full corpus when the reranker score is low. `test_agent.py` tests the loop detector and the budget as plain code on hand-made inputs — the live 4B model refused or answered before it ever looped, and provoking it into a loop to test a set comparison would be the wrong way round.
 
-**`agent_graph.py` — the same agent as a LangGraph state graph.** The `if`s inside the loop become named nodes and edges, which buys three things the loop did not have:
+**`agent/graph.py` — the same agent as a LangGraph state graph.** The `if`s inside the loop become named nodes and edges, which buys three things the loop did not have:
 - **a thread**: follow-up questions in one conversation share state, and old tool output is compacted — conclusions and the article registry stay, raw text goes, so a second question still fits the context
 - **human in the loop**: when retrieval is weak, the graph pauses with `interrupt()` and asks the user to clarify
 - **long-term memory with confirmation**: facts about the user that change the legal answer (prefecture, form of employment, company size) are extracted from what the user said, checked against closed sets, verified to be stated rather than inferred, and saved only after a yes. Memory goes into the system prompt, so anything written there is an injection that survives restarts — hence the closed sets and the confirmation. Isolated per `user_id`; facts older than 90 days are marked for re-confirmation. `test_memory.py`
@@ -463,10 +463,10 @@ The same retrieval, wrapped as a tool, for questions that span several instituti
 **`mcp_server.py` — the tool over MCP.** Registered in Claude Desktop, so a different model with a different loop can use the same retrieval. The trade-off is explicit: an MCP client runs its own loop and gets none of the budgets above, and the text the tool returns lands in a client that may hold other tools with real permissions — protection on that side belongs to the client.
 
 ```bash
-uv run python src/agent.py "育休中に残業させられる？"
-uv run python src/agent_graph.py              # interactive; /mem shows memory, /forget clears it
-uv run python src/test_agent.py
-uv run python src/test_memory.py
+uv run python -m rag.agent.loop "育休中に残業させられる？"
+uv run python -m rag.agent.graph  # interactive; /mem shows memory, /forget clears it
+uv run pytest tests/test_agent.py
+uv run pytest tests/test_memory.py
 ```
 
 ⚠️ The widen-to-full-corpus branch depends on the score threshold, which no longer separates hits from misses on Ruri (see *Open problems*): with the current threshold it rarely fires.
