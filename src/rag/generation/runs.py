@@ -6,9 +6,11 @@ import json
 import subprocess
 from datetime import datetime
 
+import httpx
+
 from rag.config import ROOT
 from rag.generation.context import ARTICLE_CAP, KW, POOL_MULT, TOP_K
-from rag.generation.prompts import GEN_OPTIONS, MODEL
+from rag.generation.prompts import GEN_OPTIONS, MODEL, URL
 from rag.retrieval import hybrid
 
 # Default context assembly mode. `whole` was chosen on measurements:
@@ -38,21 +40,40 @@ RUNS_DIR = ROOT / "data" / "runs"
 RUNS_LOG = ROOT / "data" / "runs.jsonl"
 
 
+def ollama_digests(names):
+    """Short digests of the local Ollama models. A tag is not a version:
+    gemma4:e4b was re-pulled in October under the same name, and generation
+    metrics moved while retrieval stayed identical on all 50 questions.
+    None when Ollama is unreachable or the model is not pulled."""
+    base = URL.rsplit("/api/", 1)[0]
+    try:
+        models = httpx.get(f"{base}/api/tags", timeout=5).json().get("models", [])
+    except (httpx.HTTPError, ValueError):
+        return {n: None for n in names}
+    by_name = {}
+    for m in models:
+        by_name[m["name"]] = m["digest"][:12]
+        by_name.setdefault(m["name"].removesuffix(":latest"), m["digest"][:12])
+    return {n: by_name.get(n) for n in names}
+
+
 def run_config(system, mode):
     """Everything that shapes an answer, read from the modules themselves:
     not retyped here, or this would become a fourth copy that drifts.
     The expander model is in: switching it (qwen → gemma) moved reranker
     scores enough to break an earlier "finding"."""
     from rag.retrieval import query_llm, rerank
+    expander = getattr(query_llm, "MODEL", None)
     return {
         "generator": MODEL,
+        "ollama_digests": ollama_digests([m for m in (MODEL, expander) if m]),
         "gen_options": GEN_OPTIONS,
         "system_sha": hashlib.sha256(system.encode()).hexdigest()[:12],
         "context_format": CONTEXT_FORMAT,
         "mode": mode,
         "retrieval": {"kw": KW, "top_k": TOP_K, "pool_mult": POOL_MULT,
                       "article_cap": ARTICLE_CAP},
-        "expander": getattr(query_llm, "MODEL", None),
+        "expander": expander,
         "reranker": getattr(rerank, "MODEL", None),
         "reranker_revision": getattr(rerank, "REVISION", None),
         "embedder": hybrid.EMBEDDER,
