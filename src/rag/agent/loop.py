@@ -27,16 +27,9 @@ from itertools import pairwise
 import httpx
 
 from rag import tracing
-from rag.generation.generate import (
-    KW,
-    MODEL,
-    POOL_MULT,
-    URL,
-    _by_article,
-    dedupe_by_article,
-    guard_links,
-    whole_article,
-)
+from rag.generation.context import KW, POOL_MULT, _by_article, dedupe_by_article, whole_article
+from rag.generation.guard import guard_links
+from rag.generation.prompts import MODEL, URL
 from rag.retrieval.query_llm import expand_combo
 from rag.retrieval.rerank import Reranked
 from rag.text.query_expand import expand
@@ -168,7 +161,7 @@ class Tool:
         self._search("有給休暇", 1, core_only=True)
 
     def _search(self, query, k, core_only):
-        # Same assembly as generate.retrieve in `whole` mode, plus core_only,
+        # Same assembly as context.retrieve in `whole` mode, plus core_only,
         # which retrieve hard-codes to True.
         pool = k * POOL_MULT
         with tracing.span("retrieve", "RETRIEVER", input=query,
@@ -550,7 +543,7 @@ def _run(question, tool, trace=False):
 
 
 def _result(answer, stop, budget, found, ungrounded=False):
-    # The output guard, same allow-list as generate.py and api.py. Every
+    # The output guard, same allow-list as generation/guard.py, which api.py uses too. Every
     # final answer (the model's, the final turn's, the fallback) passes
     # through here, so this is the one place to put it.
     answer, blocked = guard_links(answer)

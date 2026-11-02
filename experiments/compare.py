@@ -26,17 +26,13 @@ import pathlib
 import sys
 
 from experiments.rescore_quotes import rebuild
-from rag.generation.generate import (
-    ROOT,
-    RUNS_LOG,
-    VERDICT_RE,
-    _by_article,
-    _fmt,
-    art_key,
-    check_quotes,
-    load_golden,
-    run_metrics,
-)
+from rag.config import ROOT
+from rag.generation.checks import VERDICT_RE, check_quotes
+from rag.generation.context import _by_article
+from rag.generation.generate import load_golden
+from rag.generation.runs import RUNS_LOG, run_metrics
+from rag.text.jnum import art_key
+from rag.text.jnum import fmt as _fmt
 
 # Which way is better, per metric. None: informational only.
 BETTER = {

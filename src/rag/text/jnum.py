@@ -1,6 +1,6 @@
 """Japanese numerals and article references: shared parsing.
 
-Lifted out of generate.py: expand_golden.py uses the same parsing, and
+Lifted out of the answer checks (generation/checks.py): expand_golden.py uses the same parsing, and
 pulling the whole search pipeline in there for two functions makes no sense.
 
 Article numbers in the corpus are always kanji (第三十九条); in model output

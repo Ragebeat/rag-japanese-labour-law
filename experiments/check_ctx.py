@@ -26,16 +26,10 @@ import statistics
 
 import httpx
 
-from rag.generation.generate import (
-    DEFAULT_MODE,
-    MODEL,
-    SYSTEM,
-    URL,
-    build_context,
-    load_golden,
-    report_path,
-    retrieve,
-)
+from rag.generation.context import build_context, retrieve
+from rag.generation.generate import load_golden
+from rag.generation.prompts import MODEL, SYSTEM, URL
+from rag.generation.runs import DEFAULT_MODE, report_path
 from rag.retrieval.rerank import Reranked
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

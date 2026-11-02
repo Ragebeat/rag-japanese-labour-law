@@ -61,7 +61,7 @@ If unsure between `full` and `partial`, choose `partial`.
 
 def main():
     if not REPORT.exists():
-        sys.exit(f"no {REPORT.name} — run generate.py --eval first")
+        sys.exit(f"no {REPORT.name} ; run `python -m rag.generation.generate --eval` first")
     if OUT.exists() and "--force" not in sys.argv:
         sys.exit(f"{OUT.name} already exists and holds annotation; overwriting would erase it.\n"
                  f"View: --parse · rebuild from scratch: --force")

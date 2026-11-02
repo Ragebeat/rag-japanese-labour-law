@@ -36,20 +36,13 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from rag.generation.generate import (
-    DEFAULT_MODE,
-    GEN_OPTIONS,
-    MODEL,
-    SYSTEM,
-    TOP_K,
-    Reranked,
-    StreamGuard,
-    build_context,
-    guard_links,
-    inspect,
-    retrieve,
-)
+from rag.generation.checks import inspect
+from rag.generation.context import TOP_K, build_context, retrieve
+from rag.generation.guard import StreamGuard, guard_links
+from rag.generation.prompts import GEN_OPTIONS, MODEL, SYSTEM
+from rag.generation.runs import DEFAULT_MODE
 from rag.retrieval import rerank
+from rag.retrieval.rerank import Reranked
 
 OLLAMA = "http://localhost:11434/api/chat"
 MAX_WAITING = 3        # behind the one being served; ~1 min each on this machine

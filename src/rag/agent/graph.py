@@ -84,7 +84,7 @@ from rag.agent.loop import (
     chat,
     fallback,
 )
-from rag.generation.generate import guard_links
+from rag.generation.guard import guard_links
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 MEMORY_DIR = ROOT / "data" / "memory"   # one file per user; in .gitignore: personal data

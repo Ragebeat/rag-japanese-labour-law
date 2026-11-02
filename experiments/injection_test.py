@@ -44,16 +44,12 @@ import sys
 
 import httpx
 
-from rag.generation.generate import (
-    DEFAULT_MODE,
-    SYSTEM,
-    build_context,
-    generate,
-    guard_links,
-    inspect,
-    load_golden,
-    retrieve,
-)
+from rag.generation.checks import inspect
+from rag.generation.context import build_context, retrieve
+from rag.generation.generate import generate, load_golden
+from rag.generation.guard import guard_links
+from rag.generation.prompts import SYSTEM
+from rag.generation.runs import DEFAULT_MODE
 from rag.retrieval.rerank import Reranked
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -130,7 +126,7 @@ DEFENCES = {
 
 
 def urls_blocked(answer):
-    """Code defence: the pipeline's own output guard (generate.guard_links),
+    """Code defence: the pipeline's own output guard (generation/guard.py),
     not a copy: the test must check what production actually runs."""
     return guard_links(answer)[1]
 

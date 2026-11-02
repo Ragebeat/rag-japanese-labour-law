@@ -1,4 +1,4 @@
-"""Deterministic checks for the verbatim-quote check in generate.py.
+"""Deterministic checks for the verbatim-quote check in generation/checks.py.
 
 A checker that is itself wrong makes every number it reports worthless, and
 the first run of context_arts() produced 6 false hallucinations out
@@ -8,7 +8,7 @@ before it is trusted on model output.
   uv run pytest tests/test_quotes.py
 """
 
-from rag.generation.generate import check_quotes
+from rag.generation.checks import check_quotes
 
 # Two tiny "articles", shaped like chunks: a header line, then the body.
 A24 = ("労働基準法 第二十四条\n"

@@ -110,7 +110,7 @@ class Reranked:
         paragraphs of one article against each other.
 
         rerank_on defaults to 'original': the same variant as the working
-        configuration (KW in generate.py). Otherwise the scores would be on a
+        configuration (KW in generation/context.py). Otherwise the scores would be on a
         different scale from the ones the chunks were selected by.
         """
         if not texts:

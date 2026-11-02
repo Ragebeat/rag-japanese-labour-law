@@ -35,14 +35,9 @@ import sys
 import httpx
 
 from experiments.make_review import parse as parse_manual
-from rag.generation.generate import (
-    DEFAULT_MODE,
-    Reranked,
-    _by_article,
-    build_context,
-    report_path,
-    retrieve,
-)
+from rag.generation.context import _by_article, build_context, retrieve
+from rag.generation.runs import DEFAULT_MODE, report_path
+from rag.retrieval.rerank import Reranked
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 URL = "http://localhost:11434/api/chat"
@@ -217,7 +212,7 @@ def cmd_calibrate():
 def cmd_full(mode=DEFAULT_MODE):
     path = report_path(mode)
     if not path.exists():
-        sys.exit(f"{path.name} is needed — run generate.py --eval first")
+        sys.exit(f"{path.name} is needed ; run `python -m rag.generation.generate --eval` first")
     rows = json.loads(path.read_text(encoding="utf-8"))
 
     r = Reranked()

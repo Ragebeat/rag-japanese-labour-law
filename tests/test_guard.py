@@ -1,4 +1,4 @@
-"""Deterministic checks for the output guard (generate.guard_links, StreamGuard).
+"""Deterministic checks for the output guard (guard_links and StreamGuard in generation/guard.py).
 
 The guard is the one defence that held in the injection test (32 of 32),
 so it is tested like code, not like a model: fixed inputs, exact outputs.
@@ -10,7 +10,7 @@ already reached the user's browser before anything is checked.
 
 import pytest
 
-from rag.generation.generate import StreamGuard, guard_links
+from rag.generation.guard import StreamGuard, guard_links
 
 CASES = [
     ("詳しくは https://labor-help.example.jp を参照", ["labor-help.example.jp"]),

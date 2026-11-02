@@ -10,9 +10,12 @@ for ten lines is not worth it.
 import os
 import pathlib
 
+ROOT = pathlib.Path(__file__).resolve().parents[2]   # the repository root
+DATA = ROOT / "data"
+
 
 def load_env():
-    path = pathlib.Path(__file__).resolve().parents[2] / ".env"
+    path = ROOT / ".env"
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():

@@ -10,7 +10,10 @@ Only questions the variant actually changes are re-run (reranking is ~10 s each)
 import json
 import unicodedata
 
-from rag.generation import generate as g
+from rag.config import ROOT
+from rag.generation.context import retrieve
+from rag.generation.generate import load_golden
+from rag.generation.runs import DEFAULT_MODE
 from rag.retrieval.rerank import Reranked
 
 
@@ -52,8 +55,8 @@ def asciiq(q):
 
 VARIANTS = {"zen": zen, "kana": kana, "asciiq": asciiq}
 
-gold = g.load_golden()
-data = json.loads((g.ROOT / "data" / "gen_report_quotes_whole.json").read_text(encoding="utf-8"))
+gold = load_golden()
+data = json.loads((ROOT / "data" / "gen_report_quotes_whole.json").read_text(encoding="utf-8"))
 rows = data if isinstance(data, list) else data.get("rows", data)
 base = {x["id"]: x["hit"] for x in rows}
 
@@ -62,7 +65,7 @@ for name, fn in VARIANTS.items():
     changed = [x for x in gold if fn(x["q"]) != x["q"]]
     lost, gained = [], []
     for x in changed:
-        ch = g.retrieve(r, fn(x["q"]), g.DEFAULT_MODE)
+        ch = retrieve(r, fn(x["q"]), DEFAULT_MODE)
         want = {tuple(a) for a in x["relevant"]}
         got = {(c["law_id"], c["article_title"]) for c in ch}
         hit = bool(want & got)
